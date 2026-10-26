@@ -2,6 +2,20 @@
 
 This Turborepo starter is maintained by the Turborepo core team.
 
+## Kairo quick start
+
+```sh
+docker compose up -d        # Postgres
+npm install
+npm run db:migrate -w @kairo/db
+cp .env.example apps/api/.env   # then fill in the GitHub OAuth values
+npm run dev                 # api on :4000, web on :3000
+```
+
+- **Auth setup** (GitHub OAuth App, env vars, routes, verification):
+  [`docs/auth.md`](docs/auth.md)
+- Offline end-to-end auth check: `npm run verify:auth -w @kairo/api`
+
 ## Using this example
 
 Run the following command:

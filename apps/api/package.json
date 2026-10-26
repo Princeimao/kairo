@@ -5,15 +5,19 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch --clear-screen=false src/index.ts",
+    "stub": "tsx scripts/github-stub.ts",
+    "verify:auth": "tsx scripts/verify-auth.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@kairo/db": "^0.1.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.7.1",
     "helmet": "^8.1.0",
     "zod": "^3.25.67"
   },

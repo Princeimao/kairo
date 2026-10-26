@@ -2,8 +2,12 @@ import express from "express";
 import helmet from "helmet";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import { prisma } from "@kairo/db";
 import { env } from "./config/env.js";
 import { errorHandler } from "./middleware/error-handler.js";
+import { requireAuth } from "./middleware/auth.js";
+import { authRateLimiter } from "./middleware/rate-limit.js";
+import { authRouter } from "./routes/auth.js";
 
 export const app = express();
 
@@ -21,6 +25,33 @@ app.use(express.json());
 // ── Routes ──────────────────────────────────────────────────────────
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+app.use("/auth", authRateLimiter, authRouter);
+
+app.get("/protected", requireAuth, async (req, res, next) => {
+  try {
+    const auth = req.auth;
+    if (!auth) {
+      res.status(401).json({ error: "Authentication required" });
+      return;
+    }
+
+    const connection = await prisma.githubConnection.findUnique({
+      where: { userId: auth.user.id },
+    });
+
+    res.json({
+      ok: true,
+      message: "You reached a protected route.",
+      userId: auth.user.id,
+      username: auth.user.username,
+      sessionExpiresAt: auth.session.expiresAt,
+      scopes: connection?.scopes ?? null,
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // ── Error handling (must be last) ───────────────────────────────────

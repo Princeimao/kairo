@@ -4,18 +4,6 @@ import { Button } from "@/components/ui/button";
 export default function HomePage() {
   return (
     <div className="flex min-h-svh flex-col bg-background">
-      {/* Nav */}
-      <header className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-lg">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
-          <span className="text-lg font-semibold tracking-tight">Kairo</span>
-          <Link href="/login">
-            <Button variant="default" size="sm">
-              Sign in
-            </Button>
-          </Link>
-        </div>
-      </header>
-
       {/* Hero */}
       <main className="flex flex-1 flex-col items-center justify-center px-6 text-center">
         <div className="mx-auto max-w-2xl space-y-6">
@@ -53,11 +41,6 @@ export default function HomePage() {
           </div>
         </div>
       </main>
-
-      {/* Footer */}
-      <footer className="border-t border-border/40 py-6 text-center text-xs text-muted-foreground">
-        © {new Date().getFullYear()} Kairo. All rights reserved.
-      </footer>
     </div>
   );
 }

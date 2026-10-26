@@ -1,0 +1,26 @@
+{
+  "name": "@kairo/agent",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "agent:try": "tsx src/cli/try.ts",
+    "model:check": "tsx src/cli/model-check.ts",
+    "offline:check": "tsx src/cli/offline-check.ts",
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "^3.0.78",
+    "ai": "^7.0.153",
+    "zod": "^4.1.8"
+  },
+  "devDependencies": {
+    "@ai-sdk/provider": "^4.0.34",
+    "@types/node": "^26.4.1",
+    "eslint": "^9.20.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.9.3"
+  }
+}
