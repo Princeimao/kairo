@@ -17,3 +17,22 @@ export const OnboardingStep = {
 } as const
 
 export type OnboardingStep = (typeof OnboardingStep)[keyof typeof OnboardingStep]
+
+
+export const AgentRunMode = {
+  CREATE: 'CREATE',
+  FIX: 'FIX'
+} as const
+
+export type AgentRunMode = (typeof AgentRunMode)[keyof typeof AgentRunMode]
+
+
+export const AgentRunStatus = {
+  QUEUED: 'QUEUED',
+  RUNNING: 'RUNNING',
+  SUCCEEDED: 'SUCCEEDED',
+  FAILED: 'FAILED',
+  CANCELLED: 'CANCELLED'
+} as const
+
+export type AgentRunStatus = (typeof AgentRunStatus)[keyof typeof AgentRunStatus]

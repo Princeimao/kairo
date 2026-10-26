@@ -13,7 +13,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@kairo/agent": "*",
     "@kairo/db": "^0.1.0",
+    "@kairo/sandbox": "*",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "express": "^5.1.0",

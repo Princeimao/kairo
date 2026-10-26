@@ -216,6 +216,7 @@ export type UserWhereInput = {
   updatedAt?: Prisma.DateTimeFilter<"User"> | Date | string
   githubConnection?: Prisma.XOR<Prisma.GithubConnectionNullableScalarRelationFilter, Prisma.GithubConnectionWhereInput> | null
   sessions?: Prisma.SessionListRelationFilter
+  sandbox?: Prisma.XOR<Prisma.SandboxNullableScalarRelationFilter, Prisma.SandboxWhereInput> | null
 }
 
 export type UserOrderByWithRelationInput = {
@@ -230,6 +231,7 @@ export type UserOrderByWithRelationInput = {
   updatedAt?: Prisma.SortOrder
   githubConnection?: Prisma.GithubConnectionOrderByWithRelationInput
   sessions?: Prisma.SessionOrderByRelationAggregateInput
+  sandbox?: Prisma.SandboxOrderByWithRelationInput
 }
 
 export type UserWhereUniqueInput = Prisma.AtLeast<{
@@ -247,6 +249,7 @@ export type UserWhereUniqueInput = Prisma.AtLeast<{
   updatedAt?: Prisma.DateTimeFilter<"User"> | Date | string
   githubConnection?: Prisma.XOR<Prisma.GithubConnectionNullableScalarRelationFilter, Prisma.GithubConnectionWhereInput> | null
   sessions?: Prisma.SessionListRelationFilter
+  sandbox?: Prisma.XOR<Prisma.SandboxNullableScalarRelationFilter, Prisma.SandboxWhereInput> | null
 }, "id" | "githubId">
 
 export type UserOrderByWithAggregationInput = {
@@ -291,6 +294,7 @@ export type UserCreateInput = {
   updatedAt?: Date | string
   githubConnection?: Prisma.GithubConnectionCreateNestedOneWithoutUserInput
   sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
+  sandbox?: Prisma.SandboxCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateInput = {
@@ -305,6 +309,7 @@ export type UserUncheckedCreateInput = {
   updatedAt?: Date | string
   githubConnection?: Prisma.GithubConnectionUncheckedCreateNestedOneWithoutUserInput
   sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
+  sandbox?: Prisma.SandboxUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserUpdateInput = {
@@ -319,6 +324,7 @@ export type UserUpdateInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   githubConnection?: Prisma.GithubConnectionUpdateOneWithoutUserNestedInput
   sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
+  sandbox?: Prisma.SandboxUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateInput = {
@@ -333,6 +339,7 @@ export type UserUncheckedUpdateInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   githubConnection?: Prisma.GithubConnectionUncheckedUpdateOneWithoutUserNestedInput
   sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
+  sandbox?: Prisma.SandboxUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateManyInput = {
@@ -456,6 +463,20 @@ export type UserUpdateOneRequiredWithoutSessionsNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutSessionsInput, Prisma.UserUpdateWithoutSessionsInput>, Prisma.UserUncheckedUpdateWithoutSessionsInput>
 }
 
+export type UserCreateNestedOneWithoutSandboxInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutSandboxInput, Prisma.UserUncheckedCreateWithoutSandboxInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutSandboxInput
+  connect?: Prisma.UserWhereUniqueInput
+}
+
+export type UserUpdateOneRequiredWithoutSandboxNestedInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutSandboxInput, Prisma.UserUncheckedCreateWithoutSandboxInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutSandboxInput
+  upsert?: Prisma.UserUpsertWithoutSandboxInput
+  connect?: Prisma.UserWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutSandboxInput, Prisma.UserUpdateWithoutSandboxInput>, Prisma.UserUncheckedUpdateWithoutSandboxInput>
+}
+
 export type UserCreateWithoutGithubConnectionInput = {
   id?: string
   githubId: string
@@ -467,6 +488,7 @@ export type UserCreateWithoutGithubConnectionInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
+  sandbox?: Prisma.SandboxCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutGithubConnectionInput = {
@@ -480,6 +502,7 @@ export type UserUncheckedCreateWithoutGithubConnectionInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
+  sandbox?: Prisma.SandboxUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutGithubConnectionInput = {
@@ -509,6 +532,7 @@ export type UserUpdateWithoutGithubConnectionInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
+  sandbox?: Prisma.SandboxUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutGithubConnectionInput = {
@@ -522,6 +546,7 @@ export type UserUncheckedUpdateWithoutGithubConnectionInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
+  sandbox?: Prisma.SandboxUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateWithoutSessionsInput = {
@@ -535,6 +560,7 @@ export type UserCreateWithoutSessionsInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   githubConnection?: Prisma.GithubConnectionCreateNestedOneWithoutUserInput
+  sandbox?: Prisma.SandboxCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutSessionsInput = {
@@ -548,6 +574,7 @@ export type UserUncheckedCreateWithoutSessionsInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   githubConnection?: Prisma.GithubConnectionUncheckedCreateNestedOneWithoutUserInput
+  sandbox?: Prisma.SandboxUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutSessionsInput = {
@@ -577,6 +604,7 @@ export type UserUpdateWithoutSessionsInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   githubConnection?: Prisma.GithubConnectionUpdateOneWithoutUserNestedInput
+  sandbox?: Prisma.SandboxUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutSessionsInput = {
@@ -590,6 +618,79 @@ export type UserUncheckedUpdateWithoutSessionsInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   githubConnection?: Prisma.GithubConnectionUncheckedUpdateOneWithoutUserNestedInput
+  sandbox?: Prisma.SandboxUncheckedUpdateOneWithoutUserNestedInput
+}
+
+export type UserCreateWithoutSandboxInput = {
+  id?: string
+  githubId: string
+  username: string
+  email?: string | null
+  name?: string | null
+  avatarUrl?: string | null
+  onboardingStep?: $Enums.OnboardingStep
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  githubConnection?: Prisma.GithubConnectionCreateNestedOneWithoutUserInput
+  sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
+}
+
+export type UserUncheckedCreateWithoutSandboxInput = {
+  id?: string
+  githubId: string
+  username: string
+  email?: string | null
+  name?: string | null
+  avatarUrl?: string | null
+  onboardingStep?: $Enums.OnboardingStep
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  githubConnection?: Prisma.GithubConnectionUncheckedCreateNestedOneWithoutUserInput
+  sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
+}
+
+export type UserCreateOrConnectWithoutSandboxInput = {
+  where: Prisma.UserWhereUniqueInput
+  create: Prisma.XOR<Prisma.UserCreateWithoutSandboxInput, Prisma.UserUncheckedCreateWithoutSandboxInput>
+}
+
+export type UserUpsertWithoutSandboxInput = {
+  update: Prisma.XOR<Prisma.UserUpdateWithoutSandboxInput, Prisma.UserUncheckedUpdateWithoutSandboxInput>
+  create: Prisma.XOR<Prisma.UserCreateWithoutSandboxInput, Prisma.UserUncheckedCreateWithoutSandboxInput>
+  where?: Prisma.UserWhereInput
+}
+
+export type UserUpdateToOneWithWhereWithoutSandboxInput = {
+  where?: Prisma.UserWhereInput
+  data: Prisma.XOR<Prisma.UserUpdateWithoutSandboxInput, Prisma.UserUncheckedUpdateWithoutSandboxInput>
+}
+
+export type UserUpdateWithoutSandboxInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  githubId?: Prisma.StringFieldUpdateOperationsInput | string
+  username?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  avatarUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  onboardingStep?: Prisma.EnumOnboardingStepFieldUpdateOperationsInput | $Enums.OnboardingStep
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  githubConnection?: Prisma.GithubConnectionUpdateOneWithoutUserNestedInput
+  sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
+}
+
+export type UserUncheckedUpdateWithoutSandboxInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  githubId?: Prisma.StringFieldUpdateOperationsInput | string
+  username?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  avatarUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  onboardingStep?: Prisma.EnumOnboardingStepFieldUpdateOperationsInput | $Enums.OnboardingStep
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  githubConnection?: Prisma.GithubConnectionUncheckedUpdateOneWithoutUserNestedInput
+  sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
 }
 
 
@@ -635,6 +736,7 @@ export type UserSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = r
   updatedAt?: boolean
   githubConnection?: boolean | Prisma.User$githubConnectionArgs<ExtArgs>
   sessions?: boolean | Prisma.User$sessionsArgs<ExtArgs>
+  sandbox?: boolean | Prisma.User$sandboxArgs<ExtArgs>
   _count?: boolean | Prisma.UserCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["user"]>
 
@@ -678,6 +780,7 @@ export type UserOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = run
 export type UserInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   githubConnection?: boolean | Prisma.User$githubConnectionArgs<ExtArgs>
   sessions?: boolean | Prisma.User$sessionsArgs<ExtArgs>
+  sandbox?: boolean | Prisma.User$sandboxArgs<ExtArgs>
   _count?: boolean | Prisma.UserCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type UserIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {}
@@ -688,6 +791,7 @@ export type $UserPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
   objects: {
     githubConnection: Prisma.$GithubConnectionPayload<ExtArgs> | null
     sessions: Prisma.$SessionPayload<ExtArgs>[]
+    sandbox: Prisma.$SandboxPayload<ExtArgs> | null
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1095,6 +1199,7 @@ export interface Prisma__UserClient<T, Null = never, ExtArgs extends runtime.Typ
   readonly [Symbol.toStringTag]: "PrismaPromise"
   githubConnection<T extends Prisma.User$githubConnectionArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$githubConnectionArgs<ExtArgs>>): Prisma.Prisma__GithubConnectionClient<runtime.Types.Result.GetResult<Prisma.$GithubConnectionPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   sessions<T extends Prisma.User$sessionsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$sessionsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$SessionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  sandbox<T extends Prisma.User$sandboxArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$sandboxArgs<ExtArgs>>): Prisma.Prisma__SandboxClient<runtime.Types.Result.GetResult<Prisma.$SandboxPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1566,6 +1671,25 @@ export type User$sessionsArgs<ExtArgs extends runtime.Types.Extensions.InternalA
   take?: number
   skip?: number
   distinct?: Prisma.SessionScalarFieldEnum | Prisma.SessionScalarFieldEnum[]
+}
+
+/**
+ * User.sandbox
+ */
+export type User$sandboxArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Sandbox
+   */
+  select?: Prisma.SandboxSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Sandbox
+   */
+  omit?: Prisma.SandboxOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.SandboxInclude<ExtArgs> | null
+  where?: Prisma.SandboxWhereInput
 }
 
 /**

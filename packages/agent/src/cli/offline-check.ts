@@ -5,10 +5,13 @@ import type {
   LanguageModelV4FinishReason,
   LanguageModelV4GenerateResult,
   LanguageModelV4StreamPart,
+  LanguageModelV4StreamResult,
   LanguageModelV4Usage,
 } from "@ai-sdk/provider";
+import type { LanguageModel } from "ai";
 import { convertArrayToReadableStream, MockLanguageModelV4 } from "ai/test";
-import { runAgent, type AgentEvent } from "../agent/loop.js";
+import type { AgentEvent } from "../agent/events.js";
+import { runAgent } from "../agent/loop.js";
 import { loadAgentEnv } from "../config/env.js";
 import { parseAction } from "../tools/actions.js";
 import { LocalWorkspace } from "../workspace/local.js";
@@ -49,24 +52,30 @@ function textResult(text: string): LanguageModelV4GenerateResult {
   };
 }
 
-function streamOf(parts: LanguageModelV4StreamPart[]) {
+function streamResult(
+  parts: LanguageModelV4StreamPart[],
+  reason: LanguageModelV4FinishReason = finishToolCalls,
+): LanguageModelV4StreamResult {
   return {
     stream: convertArrayToReadableStream<LanguageModelV4StreamPart>([
       { type: "stream-start", warnings: [] },
       ...parts,
+      { type: "finish", finishReason: reason, usage },
     ]),
   };
 }
 
-function toolCallStep(id: string, toolName: string, input: unknown): LanguageModelV4StreamPart[] {
-  return [
-    { type: "tool-call", toolCallId: id, toolName, input },
-    { type: "finish-step", finishReason: finishToolCalls, usage },
-  ];
-}
-
-function finishChunk(): LanguageModelV4StreamPart {
-  return { type: "finish", finishReason: finishStop, usage };
+function toolCallPart(
+  id: string,
+  toolName: string,
+  args: unknown,
+): LanguageModelV4StreamPart {
+  return {
+    type: "tool-call",
+    toolCallId: id,
+    toolName,
+    input: JSON.stringify(args),
+  };
 }
 
 async function expectWorkspaceError(
@@ -94,9 +103,21 @@ async function workspaceTests(): Promise<void> {
   const read = await ws.readFile("src/hello.txt");
   check("workspace: write/read roundtrip", read.content === "hello world");
 
-  await expectWorkspaceError("workspace: rejects ../ traversal", () => ws.readFile("../escape.txt"), "TRAVERSAL");
-  await expectWorkspaceError("workspace: rejects absolute path", () => ws.readFile("C:/Windows/win.ini"), "ABSOLUTE_PATH");
-  await expectWorkspaceError("workspace: rejects traversal in write", () => ws.writeFile("a/../../escape.txt", "x"), "TRAVERSAL");
+  await expectWorkspaceError(
+    "workspace: rejects ../ traversal",
+    () => ws.readFile("../escape.txt"),
+    "TRAVERSAL",
+  );
+  await expectWorkspaceError(
+    "workspace: rejects absolute path",
+    () => ws.readFile("C:/Windows/win.ini"),
+    "ABSOLUTE_PATH",
+  );
+  await expectWorkspaceError(
+    "workspace: rejects traversal in write",
+    () => ws.writeFile("a/../../escape.txt", "x"),
+    "TRAVERSAL",
+  );
 
   const listing = await ws.listFiles();
   check(
@@ -108,38 +129,39 @@ async function workspaceTests(): Promise<void> {
   const search = await ws.searchCode({ query: "hello world" });
   check(
     "workspace: searchCode finds literal",
-    search.hits.some((h) => h.path === "src/hello.txt"),
+    search.hits.some((hit) => hit.path === "src/hello.txt"),
     JSON.stringify(search.hits),
   );
 
-  const timeoutResult = await ws.exec(
+  const slowCommand =
     process.platform === "win32"
-      ? "timeout /t 10 /nobreak"
-      : "sleep 10",
-    { timeoutMs: 500 },
-  );
-  check("workspace: exec timeout kills process", timeoutResult.timedOut === true);
+      ? "ping -n 15 127.0.0.1 > NUL"
+      : "sleep 10";
+  const timeoutResult = await ws.exec(slowCommand, { timeoutMs: 500 });
+  check("workspace: exec timeout kills process", timeoutResult.timedOut === true, JSON.stringify(timeoutResult));
 
-  const big = await ws.exec(`${process.execPath} -e "process.stdout.write('x'.repeat(50000))"`, {
+  const truncCode = "process.stdout.write('x'.repeat(50000))";
+  const truncCommand = `"${process.execPath}" -e "${truncCode}"`;
+  const big = await ws.exec(truncCommand, {
     timeoutMs: 20_000,
     maxOutputBytes: 1000,
   });
   check(
     "workspace: exec output truncation",
     big.truncated === true && Buffer.byteLength(big.stdout) <= 1100,
-    `stdoutBytes=${Buffer.byteLength(big.stdout)} truncated=${big.truncated}`,
+    `stdoutBytes=${Buffer.byteLength(big.stdout)} truncated=${big.truncated} stderr=${big.stderr.slice(0, 200)}`,
   );
 
   process.env.KAIRO_TEST_SECRET = "super-secret-value";
   try {
-    const envLeak = await ws.exec(
-      `${process.execPath} -e "process.stdout.write(process.env.KAIRO_TEST_SECRET ?? 'none')"`,
-      { timeoutMs: 20_000 },
-    );
+    const secretCode = "process.stdout.write(process.env.KAIRO_TEST_SECRET ?? 'none')";
+    const envLeak = await ws.exec(`"${process.execPath}" -e "${secretCode}"`, {
+      timeoutMs: 20_000,
+    });
     check(
       "workspace: child env excludes host secrets",
       envLeak.stdout.trim() === "none",
-      `stdout=${JSON.stringify(envLeak.stdout)}`,
+      `stdout=${JSON.stringify(envLeak.stdout)} stderr=${envLeak.stderr.slice(0, 200)}`,
     );
   } finally {
     delete process.env.KAIRO_TEST_SECRET;
@@ -158,20 +180,38 @@ async function workspaceTests(): Promise<void> {
         () => ws.readFile("link-to-outside.txt"),
         "SYMLINK_ESCAPE",
       );
+    } else {
+      check("workspace: symlink escape blocked on read", false, "symlink not created");
     }
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
-    if (code === "EPERM" || code === "EACCES" || code === "EEXIST") {
-      skip("workspace: symlink escape blocked on read", `cannot create symlinks here (${code})`);
+    if (code === "EPERM" || code === "EACCES") {
+      // Windows without dev mode: try a directory junction instead (no privileges needed)
+      try {
+        const junctionPath = path.join(root, "link-escape");
+        await symlink(outsideDir, junctionPath, "junction");
+        await expectWorkspaceError(
+          "workspace: symlink escape blocked on read (junction)",
+          () => ws.readFile("link-escape/secret.txt"),
+          "SYMLINK_ESCAPE",
+        );
+      } catch (junctionError) {
+        skip(
+          "workspace: symlink escape blocked on read",
+          `symlink and junction both failed (${(junctionError as NodeJS.ErrnoException).code ?? junctionError})`,
+        );
+      }
     } else {
       check("workspace: symlink escape blocked on read", false, String(error));
     }
   }
 
-  const missingCwd = await ws.exec("echo hi", { cwd: "does-not-exist" }).then(
-    () => null,
-    (error: unknown) => error,
-  );
+  const missingCwd = await ws
+    .exec(process.platform === "win32" ? "echo hi" : "echo hi", { cwd: "does-not-exist" })
+    .then(
+      () => null,
+      (error: unknown) => error,
+    );
   check(
     "workspace: exec rejects missing cwd",
     missingCwd instanceof WorkspaceError,
@@ -189,7 +229,8 @@ function actionParsingTests(): void {
   );
   check(
     "actions: parses fenced JSON action",
-    parseAction('Sure!\n```json\n{"tool":"list_files","path":"src"}\n```')?.tool === "list_files",
+    parseAction('Sure!\n```json\n{"tool":"list_files","path":"src"}\n```')?.tool ===
+      "list_files",
   );
   check("actions: rejects prose", parseAction("I think we should list files now.") === null);
   check("actions: rejects unknown tool", parseAction('{"tool":"drop_database"}') === null);
@@ -206,25 +247,29 @@ async function nativeLoopTest(): Promise<void> {
   const planner = new MockLanguageModelV4({ doGenerate: [plan] });
   const executor = new MockLanguageModelV4({
     doStream: [
-      () => streamOf(toolCallStep("c1", "write_file", { path: "hello.txt", content: "hi" })),
-      () => streamOf([
-        ...toolCallStep("c2", "finish", { success: true, summary: "created hello.txt" }),
-        finishChunk(),
-      ]),
+      streamResult([toolCallPart("c1", "write_file", { path: "hello.txt", content: "hi" })]),
+      streamResult(
+        [toolCallPart("c2", "finish", { success: true, summary: "created hello.txt" })],
+        finishStop,
+      ),
     ],
   });
 
   const env = { ...loadAgentEnv(), AGENT_MAX_REPLANS: 0, AGENT_TOOL_MODE: "native" as const };
   const result = await runAgent({
     workspace: ws,
-    executorModel: executor as never,
-    plannerModel: planner as never,
+    executorModel: executor as unknown as LanguageModel,
+    plannerModel: planner as unknown as LanguageModel,
     task: "create hello.txt with hi",
     env,
     onEvent: (event) => events.push(event),
   });
 
-  check("loop(native): status SUCCEEDED", result.status === "SUCCEEDED", JSON.stringify(result.error));
+  check(
+    "loop(native): status SUCCEEDED",
+    result.status === "SUCCEEDED",
+    JSON.stringify(result.error),
+  );
   const content = await ws.readFile("hello.txt").then((r) => r.content, () => null);
   check("loop(native): tool wrote the file", content === "hi", String(content));
   check(
@@ -234,11 +279,11 @@ async function nativeLoopTest(): Promise<void> {
     ),
     events.map((e) => e.type).join(","),
   );
-  const finishEvent = events.find((e) => e.type === "done");
+  const doneEvent = events.find((e) => e.type === "done");
   check(
     "loop(native): done event carries summary",
-    finishEvent?.type === "done" && finishEvent.summary.includes("hello.txt"),
-    JSON.stringify(finishEvent),
+    doneEvent?.type === "done" && doneEvent.summary.includes("hello.txt"),
+    JSON.stringify(doneEvent),
   );
 
   await rm(root, { recursive: true, force: true });
@@ -253,22 +298,29 @@ async function stuckDetectionTest(): Promise<void> {
     JSON.stringify({ approach: "keep trying", steps: [{ id: "1", goal: "whatever" }] }),
   );
   const planner = new MockLanguageModelV4({ doGenerate: [plan] });
-  const sameCall = toolCallStep("c1", "write_file", { path: "same.txt", content: "same" });
+  const repeatedCall = toolCallPart("c1", "write_file", {
+    path: "same.txt",
+    content: "same",
+  });
   const executor = new MockLanguageModelV4({
-    doStream: [() => streamOf([...sameCall, ...sameCall, ...sameCall, finishChunk()])],
+    doStream: [streamResult([repeatedCall, repeatedCall, repeatedCall])],
   });
 
   const env = { ...loadAgentEnv(), AGENT_MAX_REPLANS: 0, AGENT_TOOL_MODE: "native" as const };
   const result = await runAgent({
     workspace: ws,
-    executorModel: executor as never,
-    plannerModel: planner as never,
+    executorModel: executor as unknown as LanguageModel,
+    plannerModel: planner as unknown as LanguageModel,
     task: "get stuck",
     env,
     onEvent: (event) => events.push(event),
   });
 
-  check("loop(stuck): FAILED with STUCK code", result.status === "FAILED" && result.error?.code === "STUCK", JSON.stringify(result.error));
+  check(
+    "loop(stuck): FAILED with STUCK code",
+    result.status === "FAILED" && result.error?.code === "STUCK",
+    JSON.stringify(result.error),
+  );
   check(
     "loop(stuck): replan event not fired when maxReplans=0",
     !events.some((e) => e.type === "replan"),
@@ -296,14 +348,18 @@ async function jsonLoopTest(): Promise<void> {
   const env = { ...loadAgentEnv(), AGENT_MAX_REPLANS: 0, AGENT_TOOL_MODE: "json" as const };
   const result = await runAgent({
     workspace: ws,
-    executorModel: executor as never,
-    plannerModel: planner as never,
+    executorModel: executor as unknown as LanguageModel,
+    plannerModel: planner as unknown as LanguageModel,
     task: "create a.txt",
     env,
     onEvent: (event) => events.push(event),
   });
 
-  check("loop(json): status SUCCEEDED", result.status === "SUCCEEDED", JSON.stringify(result.error));
+  check(
+    "loop(json): status SUCCEEDED",
+    result.status === "SUCCEEDED",
+    JSON.stringify(result.error),
+  );
   const content = await ws.readFile("a.txt").then((r) => r.content, () => null);
   check("loop(json): fallback path wrote the file", content === "json-mode", String(content));
   check(
@@ -319,28 +375,44 @@ async function timeoutTest(): Promise<void> {
   const ws = new LocalWorkspace({ root });
 
   const slowPlanner = new MockLanguageModelV4({
-    doGenerate: async () => {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      return textResult(
-        JSON.stringify({ approach: "slow", steps: [{ id: "1", goal: "wait" }] }),
-      );
+    doGenerate: async (options) => {
+      const sleepMs = 2000;
+      await Promise.race([
+        new Promise((resolve) => setTimeout(resolve, sleepMs)),
+        new Promise((_, reject) => {
+          options.abortSignal?.addEventListener(
+            "abort",
+            () => {
+              const abortError = new Error("aborted by test budget");
+              abortError.name = "AbortError";
+              reject(abortError);
+            },
+            { once: true },
+          );
+        }),
+      ]);
+      return textResult(JSON.stringify({ approach: "slow", steps: [{ id: "1", goal: "wait" }] }));
     },
   });
-  const executor = new MockLanguageModelV4({ doGenerate: [textResult("unused")] });
+  const executor = new MockLanguageModelV4({
+    doGenerate: [textResult("{}")],
+  });
 
   const env = { ...loadAgentEnv(), AGENT_TIME_BUDGET_MS: 200 };
   const started = Date.now();
   const result = await runAgent({
     workspace: ws,
-    executorModel: executor as never,
-    plannerModel: slowPlanner as never,
+    executorModel: executor as unknown as LanguageModel,
+    plannerModel: slowPlanner as unknown as LanguageModel,
     task: "timeout test",
     env,
   });
 
   check(
     "loop(timeout): FAILS with TIMEOUT within budget",
-    result.status === "FAILED" && result.error?.code === "TIMEOUT" && Date.now() - started < 1500,
+    result.status === "FAILED" &&
+      result.error?.code === "TIMEOUT" &&
+      Date.now() - started < 1500,
     JSON.stringify({ status: result.status, error: result.error, ms: Date.now() - started }),
   );
 

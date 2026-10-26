@@ -14,9 +14,12 @@ function createPrisma() {
 
 export const prisma = createPrisma();
 export { PrismaClient } from "./generated/client/client";
+export * from "./generated/client/enums";
 export * as Prisma from "./generated/client/internal/prismaNamespace";
 export type {
   User,
   Session,
   GithubConnection,
+  AgentRun,
+  AgentStep,
 } from "./generated/client/client";

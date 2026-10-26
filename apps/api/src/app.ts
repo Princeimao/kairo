@@ -8,6 +8,8 @@ import { errorHandler } from "./middleware/error-handler.js";
 import { requireAuth } from "./middleware/auth.js";
 import { authRateLimiter } from "./middleware/rate-limit.js";
 import { authRouter } from "./routes/auth.js";
+import { runRouter } from "./routes/runs.js";
+import { sandboxRouter } from "./routes/sandbox.js";
 
 export const app = express();
 
@@ -28,6 +30,8 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/auth", authRateLimiter, authRouter);
+app.use("/runs", runRouter);
+app.use("/sandbox", sandboxRouter);
 
 app.get("/protected", requireAuth, async (req, res, next) => {
   try {

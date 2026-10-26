@@ -1,1 +1,205 @@
-import { Output, generateText, isStepCount, tool, type LanguageModel } from "ai";import { z } from "zod";import { loadAgentEnv, requireApiKey } from "../config/env.js";import { createProvider } from "../models.js";/** * Reliability probe for candidate models. * * For each model id, three checks run against the live endpoint: *  1. single   — native tool calling with zero required args *  2. multi    — two tool calls in sequence across steps *  3. structured — strict JSON object via Output.object * * Copy the printed results into docs/model-notes.md. */interface ProbeResult {  model: string;  single: "pass" | "fail" | "error";  multi: "pass" | "fail" | "error";  structured: "pass" | "fail" | "error";  singleMs: number;  multiMs: number;  structuredMs: number;  notes: string[];}const noopTool = tool({  description: "Returns a secret number. Call it with no arguments.",  inputSchema: z.object({}),  execute: async () => ({ number: 42 }),});const addTool = tool({  description: "Add two integers.",  inputSchema: z.object({ a: z.number(), b: z.number() }),  execute: async ({ a, b }) => ({ sum: a + b }),});const finishTool = tool({  description: "Finish the task.",  inputSchema: z.object({ summary: z.string() }),  execute: async ({ summary }) => ({ recorded: true, summary }),});async function probeSingle(model: LanguageModel): Promise<{ verdict: "pass" | "fail" | "error"; ms: number; note: string }> {  const started = Date.now();  try {    const result = await generateText({      model,      instructions: "You can call tools. Call the tool the user asks for. No prose.",      prompt: "Call the noop_tool exactly once. Do not reply with text.",      tools: { noop_tool: noopTool },      toolChoice: "required",      stopWhen: isStepCount(2),      maxRetries: 1,      abortSignal: AbortSignal.timeout(60_000),    });    const ms = Date.now() - started;    const call = result.toolCalls[0];    if (result.toolCalls.length === 1 && call?.toolName === "noop_tool") {      return { verdict: "pass", ms, note: "" };    }    return {      verdict: "fail",      ms,      note: `expected exactly 1 noop_tool call, got ${result.toolCalls.length}: ${result.toolCalls.map((c) => c.toolName).join(",") || "none"}`,    };  } catch (error) {    return { verdict: "error", ms: Date.now() - started, note: error instanceof Error ? error.message.slice(0, 200) : String(error) };  }}async function probeMulti(model: LanguageModel): Promise<{ verdict: "pass" | "fail" | "error"; ms: number; note: string }> {  const started = Date.now();  try {    const result = await generateText({      model,      instructions: "You can call tools. Work step by step.",      prompt:        "First call add_tool with a=12 and b=30. Then call finish_tool with the sum in the summary text.",      tools: { add_tool: addTool, finish_tool: finishTool },      stopWhen: isStepCount(6),      maxRetries: 1,      abortSignal: AbortSignal.timeout(90_000),    });    const ms = Date.now() - started;    const names = result.toolCalls.map((c) => c.toolName);    const finishCall = result.toolCalls.find((c) => c.toolName === "finish_tool");    const finishArgs = finishCall?.input as { summary?: string } | undefined;    const hasAdd = names.includes("add_tool");    const hasFinish = names.includes("finish_tool");    const mentionsSum = finishArgs?.summary?.includes("42") === true;    if (hasAdd && hasFinish && mentionsSum) {      return { verdict: "pass", ms, note: `steps=${names.length}` };    }    return {      verdict: "fail",      ms,      note: `calls=[${names.join(",")}] finishSummary=${JSON.stringify(finishArgs?.summary)}`,    };  } catch (error) {    return { verdict: "error", ms: Date.now() - started, note: error instanceof Error ? error.message.slice(0, 200) : String(error) };  }}async function probeStructured(model: LanguageModel): Promise<{ verdict: "pass" | "fail" | "error"; ms: number; note: string }> {  const started = Date.now();  const schema = z.object({    answer: z.string(),    confidence: z.number().min(0).max(1),  });  try {    const result = await generateText({      model,      instructions: "Return the requested JSON object only.",      prompt: "Set answer to '42' and confidence to 0.9.",      output: Output.object({ schema }),      maxRetries: 1,      abortSignal: AbortSignal.timeout(60_000),    });    const ms = Date.now() - started;    if (result.output.answer === "42" && Math.abs(result.output.confidence - 0.9) < 1e-6) {      return { verdict: "pass", ms, note: "" };    }    return { verdict: "fail", ms, note: `got ${JSON.stringify(result.output)}` };  } catch (error) {    return { verdict: "error", ms: Date.now() - started, note: error instanceof Error ? error.message.slice(0, 200) : String(error) };  }}async function main(): Promise<void> {  const env = loadAgentEnv();  requireApiKey(env);  const provider = createProvider(env);  const models = env.AGENT_PROBE_MODELS.split(",")    .map((m) => m.trim())    .filter(Boolean);  console.log(`endpoint: ${env.NEBIUS_BASE_URL}`);  console.log(`probing ${models.length} model(s)...`);  console.log("");  const results: ProbeResult[] = [];  for (const modelId of models) {    const model = provider.languageModel(modelId);    const single = await probeSingle(model);    const multi = await probeMulti(model);    const structured = await probeStructured(model);    const notes = [single.note, multi.note, structured.note].filter(Boolean);    results.push({      model: modelId,      single: single.verdict,      multi: multi.verdict,      structured: structured.verdict,      singleMs: single.ms,      multiMs: multi.ms,      structuredMs: structured.ms,      notes,    });    console.log(      `${modelId}\n  single=${single.verdict} (${single.ms}ms)  multi=${multi.verdict} (${multi.ms}ms)  structured=${structured.verdict} (${structured.ms}ms)`,    );    for (const note of notes) console.log(`  note: ${note}`);  }  console.log("");  console.log("markdown table:");  console.log("| model | single tool call | multi-step | structured output | latencies (ms) | notes |");  console.log("| --- | --- | --- | --- | --- | --- |");  for (const r of results) {    console.log(      `| ${r.model} | ${r.single} | ${r.multi} | ${r.structured} | ${r.singleMs}/${r.multiMs}/${r.structuredMs} | ${r.notes.join("; ").replaceAll("|", "\\|")} |`,    );  }  const anyFail = results.some(    (r) => r.single !== "pass" || r.multi !== "pass" || r.structured !== "pass",  );  process.exitCode = anyFail ? 1 : 0;}main().catch((error: unknown) => {  const message = error instanceof Error ? error.message : String(error);  console.error(message);  process.exitCode = message.includes("NEBIUS_API_KEY") ? 2 : 1;});
+import { Output, generateText, isStepCount, tool, type LanguageModel } from "ai";
+import { z } from "zod";
+import { loadAgentEnv, requireApiKey } from "../config/env.js";
+import { createProvider } from "../models.js";
+
+/**
+ * Reliability probe for candidate models.
+ *
+ * For each model id, three checks run against the live endpoint:
+ *  1. single     - native tool calling with zero required args
+ *  2. multi      - two tool calls in sequence across steps
+ *  3. structured - strict JSON object via Output.object
+ *
+ * Copy the printed results into docs/model-notes.md.
+ */
+
+interface ProbeResult {
+  model: string;
+  single: "pass" | "fail" | "error";
+  multi: "pass" | "fail" | "error";
+  structured: "pass" | "fail" | "error";
+  singleMs: number;
+  multiMs: number;
+  structuredMs: number;
+  notes: string[];
+}
+
+interface ProbeOutcome {
+  verdict: "pass" | "fail" | "error";
+  ms: number;
+  note: string;
+}
+
+const noopTool = tool({
+  description: "Returns a secret number. Call it with no arguments.",
+  inputSchema: z.object({}),
+  execute: async () => ({ number: 42 }),
+});
+
+const addTool = tool({
+  description: "Add two integers.",
+  inputSchema: z.object({ a: z.number(), b: z.number() }),
+  execute: async ({ a, b }) => ({ sum: a + b }),
+});
+
+const finishTool = tool({
+  description: "Finish the task.",
+  inputSchema: z.object({ summary: z.string() }),
+  execute: async ({ summary }) => ({ recorded: true, summary }),
+});
+
+async function probeSingle(model: LanguageModel): Promise<ProbeOutcome> {
+  const started = Date.now();
+  try {
+    const result = await generateText({
+      model,
+      instructions: "You can call tools. Call the tool the user asks for. No prose.",
+      prompt: "Call the noop_tool exactly once. Do not reply with text.",
+      tools: { noop_tool: noopTool },
+      toolChoice: "required",
+      stopWhen: isStepCount(2),
+      maxRetries: 1,
+      abortSignal: AbortSignal.timeout(60_000),
+    });
+    const ms = Date.now() - started;
+    const call = result.toolCalls[0];
+    if (result.toolCalls.length === 1 && call?.toolName === "noop_tool") {
+      return { verdict: "pass", ms, note: "" };
+    }
+    return {
+      verdict: "fail",
+      ms,
+      note: `expected exactly 1 noop_tool call, got ${result.toolCalls.length}: ${result.toolCalls.map((c) => c.toolName).join(",") || "none"}`,
+    };
+  } catch (error) {
+    return {
+      verdict: "error",
+      ms: Date.now() - started,
+      note: error instanceof Error ? error.message.slice(0, 200) : String(error),
+    };
+  }
+}
+
+async function probeMulti(model: LanguageModel): Promise<ProbeOutcome> {
+  const started = Date.now();
+  try {
+    const result = await generateText({
+      model,
+      instructions: "You can call tools. Work step by step.",
+      prompt:
+        "First call add_tool with a=12 and b=30. Then call finish_tool with the sum in the summary text.",
+      tools: { add_tool: addTool, finish_tool: finishTool },
+      stopWhen: isStepCount(6),
+      maxRetries: 1,
+      abortSignal: AbortSignal.timeout(90_000),
+    });
+    const ms = Date.now() - started;
+    const names = result.toolCalls.map((c) => c.toolName);
+    const finishCall = result.toolCalls.find((c) => c.toolName === "finish_tool");
+    const finishArgs = finishCall?.input as { summary?: string } | undefined;
+    const hasAdd = names.includes("add_tool");
+    const hasFinish = names.includes("finish_tool");
+    const mentionsSum = finishArgs?.summary?.includes("42") === true;
+    if (hasAdd && hasFinish && mentionsSum) {
+      return { verdict: "pass", ms, note: `steps=${names.length}` };
+    }
+    return {
+      verdict: "fail",
+      ms,
+      note: `calls=[${names.join(",")}] finishSummary=${JSON.stringify(finishArgs?.summary)}`,
+    };
+  } catch (error) {
+    return {
+      verdict: "error",
+      ms: Date.now() - started,
+      note: error instanceof Error ? error.message.slice(0, 200) : String(error),
+    };
+  }
+}
+
+async function probeStructured(model: LanguageModel): Promise<ProbeOutcome> {
+  const started = Date.now();
+  const schema = z.object({
+    answer: z.string(),
+    confidence: z.number().min(0).max(1),
+  });
+  try {
+    const result = await generateText({
+      model,
+      instructions: "Return the requested JSON object only.",
+      prompt: "Set answer to '42' and confidence to 0.9.",
+      output: Output.object({ schema }),
+      maxRetries: 1,
+      abortSignal: AbortSignal.timeout(60_000),
+    });
+    const ms = Date.now() - started;
+    if (result.output.answer === "42" && Math.abs(result.output.confidence - 0.9) < 1e-6) {
+      return { verdict: "pass", ms, note: "" };
+    }
+    return { verdict: "fail", ms, note: `got ${JSON.stringify(result.output)}` };
+  } catch (error) {
+    return {
+      verdict: "error",
+      ms: Date.now() - started,
+      note: error instanceof Error ? error.message.slice(0, 200) : String(error),
+    };
+  }
+}
+
+async function main(): Promise<void> {
+  const env = loadAgentEnv();
+  requireApiKey(env);
+  const provider = createProvider(env);
+  const models = env.AGENT_PROBE_MODELS.split(",")
+    .map((m) => m.trim())
+    .filter(Boolean);
+
+  console.log(`endpoint: ${env.NEBIUS_BASE_URL}`);
+  console.log(`probing ${models.length} model(s)...`);
+  console.log("");
+
+  const results: ProbeResult[] = [];
+  for (const modelId of models) {
+    const model = provider.languageModel(modelId);
+    const single = await probeSingle(model);
+    const multi = await probeMulti(model);
+    const structured = await probeStructured(model);
+    const notes = [single.note, multi.note, structured.note].filter(Boolean);
+    results.push({
+      model: modelId,
+      single: single.verdict,
+      multi: multi.verdict,
+      structured: structured.verdict,
+      singleMs: single.ms,
+      multiMs: multi.ms,
+      structuredMs: structured.ms,
+      notes,
+    });
+    console.log(
+      `${modelId}\n  single=${single.verdict} (${single.ms}ms)  multi=${multi.verdict} (${multi.ms}ms)  structured=${structured.verdict} (${structured.ms}ms)`,
+    );
+    for (const note of notes) console.log(`  note: ${note}`);
+  }
+
+  console.log("");
+  console.log("markdown table:");
+  console.log("| model | single tool call | multi-step | structured output | latencies (ms) | notes |");
+  console.log("| --- | --- | --- | --- | --- | --- |");
+  for (const result of results) {
+    console.log(
+      `| ${result.model} | ${result.single} | ${result.multi} | ${result.structured} | ${result.singleMs}/${result.multiMs}/${result.structuredMs} | ${result.notes.join("; ").replaceAll("|", "\\|")} |`,
+    );
+  }
+
+  const anyFail = results.some(
+    (r) => r.single !== "pass" || r.multi !== "pass" || r.structured !== "pass",
+  );
+  process.exitCode = anyFail ? 1 : 0;
+}
+
+main().catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(message);
+  process.exitCode = message.includes("NEBIUS_API_KEY") ? 2 : 1;
+});

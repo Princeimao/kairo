@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import gsap from "gsap";
 
 const navigation = [
@@ -148,7 +149,7 @@ export default function StaticNavbar({
       {/* Main SaaS header */}
       <header className="fixed inset-x-0 top-0 z-50 border-b border-black/5 bg-white/85 backdrop-blur-xl">
         <div className="mx-auto flex h-[76px] max-w-7xl items-center justify-between px-5 sm:px-8">
-          <a
+          <Link
             href="/"
             className="flex items-center gap-2.5"
             aria-label={`${brand} home`}
@@ -177,7 +178,7 @@ export default function StaticNavbar({
             <span className="text-lg font-semibold tracking-tight text-neutral-950">
               {brand}
             </span>
-          </a>
+          </Link>
 
           <nav
             aria-label="Main navigation"
@@ -323,8 +324,8 @@ export default function StaticNavbar({
                 </div>
 
                 <p className="mb-4 text-sm leading-6 text-neutral-200">
-                  "Build an authentication flow, add tests, and open a pull
-                  request."
+                  &quot;Build an authentication flow, add tests, and open a pull
+                  request.&quot;
                 </p>
 
                 <div className="space-y-3 border-t border-white/10 pt-4">

@@ -32,3 +32,18 @@ export type GithubConnection = Prisma.GithubConnectionModel
  * 
  */
 export type Session = Prisma.SessionModel
+/**
+ * Model Sandbox
+ * 
+ */
+export type Sandbox = Prisma.SandboxModel
+/**
+ * Model AgentRun
+ * 
+ */
+export type AgentRun = Prisma.AgentRunModel
+/**
+ * Model AgentStep
+ * 
+ */
+export type AgentStep = Prisma.AgentStepModel

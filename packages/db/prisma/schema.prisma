@@ -14,6 +14,19 @@ enum OnboardingStep {
   DONE
 }
 
+enum AgentRunMode {
+  CREATE
+  FIX
+}
+
+enum AgentRunStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
 model User {
   id             String         @id @default(cuid())
   githubId       String         @unique
@@ -27,6 +40,7 @@ model User {
 
   githubConnection GithubConnection?
   sessions         Session[]
+  sandbox          Sandbox?
 
   @@map("users")
 }
@@ -58,4 +72,53 @@ model Session {
   @@index([userId])
   @@index([tokenHash])
   @@map("sessions")
+}
+
+model Sandbox {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  image         String
+  volumeName    String   @unique
+  containerName String   @unique
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  lastActiveAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sandboxes")
+}
+
+model AgentRun {
+  id           String         @id @default(cuid())
+  userId       String
+  mode         AgentRunMode
+  prompt       String
+  status       AgentRunStatus @default(QUEUED)
+  repoFullName String?
+  branch       String?
+  prUrl        String?
+  createdAt    DateTime       @default(now())
+  finishedAt   DateTime?
+
+  steps AgentStep[]
+
+  @@index([userId, createdAt])
+  @@index([status])
+  @@map("agent_runs")
+}
+
+model AgentStep {
+  id        String   @id @default(cuid())
+  runId     String
+  seq       Int
+  type      String
+  payload   Json
+  createdAt DateTime @default(now())
+
+  run AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, seq])
+  @@index([runId, seq])
+  @@map("agent_steps")
 }

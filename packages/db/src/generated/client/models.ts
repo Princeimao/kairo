@@ -11,4 +11,7 @@
 export type * from './models/User'
 export type * from './models/GithubConnection'
 export type * from './models/Session'
+export type * from './models/Sandbox'
+export type * from './models/AgentRun'
+export type * from './models/AgentStep'
 export type * from './commonInputTypes'

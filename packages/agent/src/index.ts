@@ -9,6 +9,7 @@ export type {
   Plan,
   PlanStep,
 } from "./agent/events.js";
+export { isTerminalEvent } from "./agent/events.js";
 export { LocalWorkspace, type LocalWorkspaceOptions } from "./workspace/local.js";
 export { WorkspaceError } from "./workspace/types.js";
 export type {

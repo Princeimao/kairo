@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { createReadStream } from "node:fs";
+import { createReadStream, realpathSync } from "node:fs";
 import { access, lstat, mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import path from "node:path";
@@ -64,13 +64,21 @@ export interface LocalWorkspaceOptions {
 export class LocalWorkspace implements Workspace {
   readonly rootLabel: string;
   private readonly rootAbs: string;
+  private rootRealCache: string | undefined;
   private readonly maxReadBytes: number;
   private readonly maxWriteBytes: number;
   private readonly maxOutputBytes: number;
   private readonly defaultTimeoutMs: number;
 
   constructor(opts: LocalWorkspaceOptions) {
-    this.rootAbs = path.resolve(opts.root);
+    const requested = path.resolve(opts.root);
+    let real = requested;
+    try {
+      real = realpathSync(requested);
+    } catch {
+      // root does not exist yet; keep the requested path
+    }
+    this.rootAbs = real;
     this.rootLabel = path.basename(this.rootAbs);
     this.maxReadBytes = opts.maxReadBytes ?? DEFAULT_MAX_READ_BYTES;
     this.maxWriteBytes = opts.maxWriteBytes ?? DEFAULT_MAX_WRITE_BYTES;
@@ -117,14 +125,33 @@ export class LocalWorkspace implements Workspace {
   }
 
   private async assertRealPathInside(abs: string): Promise<string> {
+    const rootSpec = await this.realRoot();
     const real = await realpath(abs);
-    if (!this.isInsideRoot(path.resolve(real))) {
+    const rel = path.relative(path.resolve(rootSpec), path.resolve(real));
+    if (rel !== "" && (rel.startsWith("..") || path.isAbsolute(rel))) {
       throw new WorkspaceError(
         "symlink points outside the workspace",
         "SYMLINK_ESCAPE",
       );
     }
     return real;
+  }
+
+  /**
+   * Realpath of the workspace root, cached.
+   * Computed with async realpath — on Windows it resolves 8.3 aliases
+   * (e.g. PRINCE~1) that realpathSync leaves untouched, and child paths
+   * must be compared against the same spelling.
+   */
+  private async realRoot(): Promise<string> {
+    if (this.rootRealCache) return this.rootRealCache;
+    try {
+      const real = await realpath(this.rootAbs);
+      this.rootRealCache = real;
+      return real;
+    } catch {
+      return this.rootAbs;
+    }
   }
 
   async readFile(relPath: string, opts?: { maxBytes?: number }): Promise<ReadResult> {
@@ -227,6 +254,7 @@ export class LocalWorkspace implements Workspace {
     isRegex: boolean,
     maxResults: number,
   ): Promise<SearchResult | null> {
+    const patternArgs = isRegex ? ["-e", query] : ["-F", "-e", query];
     const args = [
       "--line-number",
       "--no-heading",
@@ -234,8 +262,7 @@ export class LocalWorkspace implements Workspace {
       "never",
       "--max-count",
       "5",
-      isRegex ? query : "-F",
-      ...(isRegex ? [] : [query]),
+      ...patternArgs,
       absRoot,
     ];
     const result = await this.spawnCapture(["rg", ...args], {
@@ -244,13 +271,19 @@ export class LocalWorkspace implements Workspace {
       maxOutputBytes: 200_000,
     });
     if (result.spawnFailed) return null;
+    const rootReal = await this.realRoot();
     const hits: SearchHit[] = [];
     for (const line of result.stdout.split("\n")) {
       if (hits.length >= maxResults) break;
       const match = /^(.*?):(\d+):(.*)$/.exec(line);
       if (!match) continue;
-      const rel = path.relative(this.rootAbs, match[1]!).split(path.sep).join("/");
-      hits.push({ path: rel, line: Number(match[2]), text: match[3]!.trimEnd() });
+      const abs = path.resolve(match[1]!);
+      const rel = path.relative(rootReal, abs);
+      const relPath =
+        rel === "" || rel.startsWith("..") || path.isAbsolute(rel)
+          ? abs
+          : rel.split(path.sep).join("/");
+      hits.push({ path: relPath, line: Number(match[2]), text: match[3]!.trimEnd() });
     }
     return { hits, truncated: hits.length >= maxResults };
   }
