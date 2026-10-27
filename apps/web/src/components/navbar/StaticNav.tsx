@@ -3,32 +3,132 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import gsap from "gsap";
+import {
+  ArrowDownRight,
+  ArrowRight,
+  ArrowUpRight,
+  Bot,
+  ChevronDown,
+  Code2,
+  FileSearch,
+  Layers3,
+  Menu,
+  ShieldCheck,
+  Sparkles,
+  Workflow,
+  X,
+} from "lucide-react";
 
 const navigation = [
-  { label: "Product", href: "#product" },
-  { label: "Features", href: "#features" },
-  { label: "Use cases", href: "#use-cases" },
-  { label: "Pricing", href: "#pricing" },
-  { label: "Docs", href: "/docs" },
-];
+  { label: "Product", type: "dropdown" },
+  { label: "Features", type: "dropdown" },
+  { label: "Use cases", type: "dropdown" },
+  { label: "Pricing", type: "link", href: "#pricing" },
+  { label: "Docs", type: "link", href: "/docs" },
+] as const;
 
-const capabilities = [
-  {
-    number: "01",
-    title: "Code autonomously",
-    description: "Build features, fix bugs, and ship changes.",
+const dropdowns = {
+  Product: {
+    eyebrow: "THE PLATFORM",
+    title: "Your agent. Your environment.",
+    description:
+      "A cloud workspace for agents that can do more than write code.",
+    items: [
+      {
+        icon: Bot,
+        title: "Agent workspace",
+        description: "A dedicated environment for every task.",
+        href: "#product",
+      },
+      {
+        icon: Layers3,
+        title: "Custom skills",
+        description: "Extend your agent with reusable capabilities.",
+        href: "#skills",
+      },
+      {
+        icon: ShieldCheck,
+        title: "Isolated execution",
+        description: "Run tasks in a separate environment.",
+        href: "#security",
+      },
+      {
+        icon: Workflow,
+        title: "Task execution",
+        description: "Let your agent work through complex tasks.",
+        href: "#execution",
+      },
+    ],
   },
-  {
-    number: "02",
-    title: "Run in the cloud",
-    description: "Give every agent an isolated cloud workspace.",
+
+  Features: {
+    eyebrow: "BUILT TO DO THE WORK",
+    title: "Everything your agent needs.",
+    description:
+      "Give your agent the tools and environment to move from instructions to execution.",
+    items: [
+      {
+        icon: Code2,
+        title: "Coding & development",
+        description: "Build, debug, and test projects.",
+        href: "#coding",
+      },
+      {
+        icon: FileSearch,
+        title: "Research & browsing",
+        description: "Explore information and organize findings.",
+        href: "#research",
+      },
+      {
+        icon: Layers3,
+        title: "Files & skills",
+        description: "Bring your own files and capabilities.",
+        href: "#skills",
+      },
+      {
+        icon: Workflow,
+        title: "Parallel workflows",
+        description: "Work on multiple tasks independently.",
+        href: "#workflows",
+      },
+    ],
   },
-  {
-    number: "03",
-    title: "Work in parallel",
-    description: "Delegate multiple tasks without blocking your workflow.",
+
+  "Use cases": {
+    eyebrow: "POSSIBILITIES",
+    title: "Delegate the work, not just the code.",
+    description:
+      "From research to complex workflows, give your agent a goal and the tools to pursue it.",
+    items: [
+      {
+        icon: FileSearch,
+        title: "Deep research",
+        description: "Gather, compare, and synthesize information.",
+        href: "#research",
+      },
+      {
+        icon: Code2,
+        title: "Build applications",
+        description: "Develop and iterate on real projects.",
+        href: "#development",
+      },
+      {
+        icon: Layers3,
+        title: "Knowledge work",
+        description: "Process documents, files, and data.",
+        href: "#knowledge",
+      },
+      {
+        icon: Workflow,
+        title: "Custom automation",
+        description: "Create workflows around your own needs.",
+        href: "#automation",
+      },
+    ],
   },
-];
+} as const;
+
+type MenuName = keyof typeof dropdowns;
 
 interface SaaSNavbarProps {
   brand?: string;
@@ -37,344 +137,441 @@ interface SaaSNavbarProps {
 }
 
 export default function StaticNavbar({
-  brand = "Hyperiux",
+  brand = "Kairo",
   loginHref = "/login",
   signupHref = "/signup",
 }: SaaSNavbarProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const overlayRef = useRef<HTMLDivElement>(null);
+  const [activeMenu, setActiveMenu] = useState<MenuName | null>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const rootRef = useRef<HTMLElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<gsap.core.Timeline | null>(null);
 
   useEffect(() => {
-    const overlay = overlayRef.current;
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        ".nav-shell",
+        { opacity: 0, y: -16 },
+        {
+          opacity: 1,
+          y: 0,
+          duration: 0.8,
+          ease: "power3.out",
+          clearProps: "transform",
+        },
+      );
+
+      gsap.fromTo(
+        ".nav-brand, .nav-link, .nav-cta",
+        { opacity: 0, y: 8 },
+        {
+          opacity: 1,
+          y: 0,
+          duration: 0.55,
+          stagger: 0.055,
+          delay: 0.12,
+          ease: "power2.out",
+        },
+      );
+    }, rootRef);
+
+    return () => ctx.revert();
+  }, []);
+
+  // Animate the entire navbar container when opening or closing a dropdown.
+  useEffect(() => {
+    const panel = panelRef.current;
     const content = contentRef.current;
 
-    if (!overlay || !content) return;
+    if (!panel) return;
 
     timelineRef.current?.kill();
 
-    const reduceMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
+    const timeline = gsap.timeline();
+    timelineRef.current = timeline;
 
-    if (isOpen) {
-      document.body.style.overflow = "hidden";
+    if (activeMenu) {
+      panel.style.visibility = "visible";
+      panel.style.pointerEvents = "auto";
 
-      gsap.set(overlay, {
-        display: "flex",
-        pointerEvents: "auto",
-      });
+      const isAlreadyOpen = Number(gsap.getProperty(panel, "height")) > 0;
 
-      if (reduceMotion) {
-        gsap.set(overlay, { autoAlpha: 1 });
-        gsap.set(content, { y: 0, opacity: 1 });
-        return;
-      }
-
-      const tl = gsap.timeline();
-      timelineRef.current = tl;
-
-      tl.fromTo(
-        overlay,
-        { clipPath: "inset(0 0 100% 0)" },
-        {
-          clipPath: "inset(0 0 0% 0)",
-          duration: 0.8,
-          ease: "power4.inOut",
-        },
-      ).fromTo(
-        content.children,
-        { y: 28, opacity: 0 },
-        {
-          y: 0,
-          opacity: 1,
-          duration: 0.55,
-          stagger: 0.07,
-          ease: "power3.out",
-        },
-        "-=0.35",
-      );
-    } else {
-      document.body.style.overflow = "";
-
-      if (reduceMotion) {
-        gsap.set(overlay, {
-          display: "none",
-          pointerEvents: "none",
-          autoAlpha: 0,
-          clearProps: "clipPath",
+      if (!isAlreadyOpen) {
+        gsap.set(panel, {
+          height: 0,
+          opacity: 0,
         });
-        gsap.set(content, { clearProps: "all" });
-        return;
+
+        timeline.to(panel, {
+          height: "auto",
+          opacity: 1,
+          duration: 0.48,
+          ease: "power3.inOut",
+        });
+      } else {
+        timeline.to(panel, {
+          height: "auto",
+          opacity: 1,
+          duration: 0.32,
+          ease: "power2.out",
+        });
       }
 
-      const tl = gsap.timeline({
+      if (content) {
+        const items = content.querySelectorAll("[data-menu-item]");
+
+        timeline.fromTo(
+          items,
+          {
+            opacity: 0,
+            y: 12,
+            filter: "blur(3px)",
+          },
+          {
+            opacity: 1,
+            y: 0,
+            filter: "blur(0px)",
+            duration: 0.38,
+            stagger: 0.055,
+            ease: "power3.out",
+          },
+          isAlreadyOpen ? 0 : 0.12,
+        );
+      }
+    } else {
+      panel.style.pointerEvents = "none";
+
+      timeline.to(panel, {
+        height: 0,
+        opacity: 0,
+        duration: 0.3,
+        ease: "power3.inOut",
         onComplete: () => {
-          gsap.set(overlay, {
-            display: "none",
-            pointerEvents: "none",
-            clearProps: "clipPath",
-          });
-          gsap.set(content.children, { clearProps: "all" });
+          panel.style.visibility = "hidden";
         },
-      });
-
-      timelineRef.current = tl;
-
-      tl.to(overlay, {
-        clipPath: "inset(0 0 100% 0)",
-        duration: 0.65,
-        ease: "power4.inOut",
       });
     }
 
     return () => {
-      timelineRef.current?.kill();
-      document.body.style.overflow = "";
+      timeline.kill();
     };
-  }, [isOpen]);
+  }, [activeMenu]);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsOpen(false);
-    };
+  function toggleMenu(name: MenuName) {
+    setActiveMenu((current) => (current === name ? null : name));
+  }
 
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, []);
+  function closeAll() {
+    setActiveMenu(null);
+    setMobileOpen(false);
+  }
 
   return (
-    <>
-      {/* Main SaaS header */}
-      <header className="fixed inset-x-0 top-0 z-50 border-b border-black/5 bg-white/85 backdrop-blur-xl">
-        <div className="mx-auto flex h-[76px] max-w-7xl items-center justify-between px-5 sm:px-8">
+    <header
+      ref={rootRef}
+      className="fixed inset-x-0 top-0 z-50 px-3 pt-3 sm:px-6 sm:pt-5"
+      onKeyDown={(event) => {
+        if (event.key === "Escape") closeAll();
+      }}
+    >
+      <div
+        className="nav-shell relative mx-auto max-w-[1440px] bg-[#FCFBF9]/95 shadow-[0_8px_35px_rgba(30,20,45,0.045)] backdrop-blur-2xl rounded-2xl"
+        onMouseLeave={() => setActiveMenu(null)}
+      >
+        {/* Main navigation row */}
+        <div className="flex min-h-[70px] items-center px-4 sm:px-7">
+          {/* Brand */}
           <Link
             href="/"
-            className="flex items-center gap-2.5"
+            onClick={closeAll}
             aria-label={`${brand} home`}
+            className="nav-brand group flex shrink-0 items-center gap-2.5"
           >
-            <span className="flex size-9 items-center justify-center rounded-xl bg-orange-500 text-white">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                className="size-5"
-                aria-hidden="true"
-              >
-                <path
-                  d="M5 16.5 12 4l7 12.5H5Z"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M9 16.5 12 11l3 5.5"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinejoin="round"
-                />
-              </svg>
+            <span className="flex size-9 items-center justify-center overflow-hidden rounded-xl bg-orange-500 transition-transform duration-300 group-hover:rotate-[-5deg] group-hover:scale-105">
+              <img
+                src="/kairo_logo.jpg"
+                alt="logo"
+                className="size-full object-cover"
+              />
             </span>
-            <span className="text-lg font-semibold tracking-tight text-neutral-950">
+
+            <span className="text-[19px] font-semibold tracking-[-0.8px] text-neutral-900">
               {brand}
+              <span className="text-orange-500">.</span>
             </span>
           </Link>
 
+          {/* Navigation sits beside the logo, not in the center */}
           <nav
             aria-label="Main navigation"
-            className="hidden items-center gap-8 lg:flex"
+            className="ml-5 hidden items-center gap-1 xl:ml-10 lg:flex"
           >
-            {navigation.map((item) => (
-              <a
-                key={item.label}
-                href={item.href}
-                className="text-sm font-medium text-neutral-600 transition-colors hover:text-orange-600"
-              >
-                {item.label}
-              </a>
-            ))}
+            {navigation.map((item, index) => {
+              const isDropdown = item.type === "dropdown";
+              const isActive = isDropdown && activeMenu === item.label;
+
+              if (!isDropdown) {
+                return (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    onMouseEnter={() => setActiveMenu(null)}
+                    onFocus={() => setActiveMenu(null)}
+                    className="nav-link group relative rounded-lg px-3 py-2.5 text-[13px] font-medium text-neutral-500 transition-colors duration-200 hover:bg-neutral-100/80 hover:text-neutral-950"
+                  >
+                    {item.label}
+                    <span className="absolute inset-x-3 bottom-1 h-px origin-left scale-x-0 bg-orange-500 transition-transform duration-300 group-hover:scale-x-100" />
+                  </Link>
+                );
+              }
+
+              const name = item.label as MenuName;
+
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  aria-expanded={isActive}
+                  onMouseEnter={() => setActiveMenu(name)}
+                  onFocus={() => setActiveMenu(name)}
+                  onClick={() => toggleMenu(name)}
+                  style={{ "--nav-index": index } as React.CSSProperties}
+                  className={`nav-link group relative flex items-center gap-1.5 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-colors duration-200 ${
+                    isActive
+                      ? "bg-orange-50 text-orange-700"
+                      : "text-neutral-500 hover:bg-neutral-100/80 hover:text-neutral-950"
+                  }`}
+                >
+                  {item.label}
+
+                  <ChevronDown
+                    size={13}
+                    className={`transition-transform duration-300 ${
+                      isActive ? "rotate-180" : "group-hover:translate-y-0.5"
+                    }`}
+                  />
+
+                  <span
+                    className={`absolute inset-x-3 bottom-1 h-px origin-left bg-orange-500 transition-transform duration-300 ${
+                      isActive ? "scale-x-100" : "scale-x-0"
+                    }`}
+                  />
+                </button>
+              );
+            })}
           </nav>
 
-          <div className="flex items-center gap-3">
-            <a
+          {/* CTA stays at the far right */}
+          <div className="ml-auto hidden items-center gap-4 sm:flex">
+            <Link
               href={loginHref}
-              className="hidden px-3 py-2 text-sm font-medium text-neutral-700 transition-colors hover:text-black sm:inline-flex"
+              onMouseEnter={() => setActiveMenu(null)}
+              className="nav-link text-[13px] font-medium text-neutral-500 transition-colors hover:text-neutral-950"
             >
               Log in
-            </a>
+            </Link>
 
-            <a
+            <Link
               href={signupHref}
-              className="hidden items-center gap-2 rounded-xl bg-neutral-950 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-orange-600 sm:inline-flex"
+              className="nav-cta group relative inline-flex items-center gap-2 overflow-hidden rounded-xl bg-neutral-950 px-[17px] py-[11px] text-[12px] font-medium text-white transition-all duration-300 hover:-translate-y-0.5 hover:bg-orange-600 hover:shadow-[0_6px_22px_rgba(234,88,12,0.2)]"
             >
-              Start building
-              <span aria-hidden="true">↗</span>
-            </a>
-
-            <button
-              type="button"
-              onClick={() => setIsOpen((value) => !value)}
-              aria-label={isOpen ? "Close menu" : "Open menu"}
-              aria-expanded={isOpen}
-              aria-controls="saas-mobile-menu"
-              className="flex size-10 flex-col items-center justify-center gap-1.5 rounded-xl border border-neutral-200 text-neutral-900 transition-colors hover:bg-neutral-100 lg:hidden"
-            >
-              <span
-                className={`h-0.5 w-5 bg-current transition-transform duration-300 ${
-                  isOpen ? "translate-y-1 rotate-45" : ""
-                }`}
+              <span className="relative z-10">Start building</span>
+              <ArrowUpRight
+                size={14}
+                className="relative z-10 transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
               />
-              <span
-                className={`h-0.5 w-5 bg-current transition-all duration-300 ${
-                  isOpen ? "scale-x-0 opacity-0" : ""
-                }`}
-              />
-              <span
-                className={`h-0.5 w-5 bg-current transition-transform duration-300 ${
-                  isOpen ? "-translate-y-2 -rotate-45" : ""
-                }`}
-              />
-            </button>
+            </Link>
           </div>
+
+          {/* Mobile toggle */}
+          <button
+            type="button"
+            onClick={() => {
+              setMobileOpen((value) => !value);
+              setActiveMenu(null);
+            }}
+            aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileOpen}
+            className="ml-auto flex size-10 items-center justify-center rounded-xl border border-neutral-200 text-neutral-800 transition-colors hover:bg-neutral-100 sm:ml-0 lg:hidden"
+          >
+            {mobileOpen ? <X size={19} /> : <Menu size={19} />}
+          </button>
         </div>
-      </header>
 
-      {/* Animated full-screen menu */}
-      <div
-        ref={overlayRef}
-        id="saas-mobile-menu"
-        aria-hidden={!isOpen}
-        className="fixed inset-0 z-40 hidden flex-col overflow-y-auto bg-[#ff5f00] pt-[76px] text-white"
-        style={{
-          clipPath: "inset(0 0 100% 0)",
-          pointerEvents: isOpen ? "auto" : "none",
-        }}
-      >
+        {/* Expanding mega-menu: part of the navbar container */}
         <div
-          ref={contentRef}
-          className="mx-auto flex min-h-full w-full max-w-7xl flex-1 flex-col justify-between gap-12 px-6 py-10 sm:px-10 lg:px-16"
+          ref={panelRef}
+          aria-hidden={!activeMenu}
+          inert={!activeMenu}
+          className="invisible h-0 overflow-hidden border-t border-neutral-200/80 opacity-0"
         >
-          <div className="flex items-center justify-between border-b border-white/25 pb-5">
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-white/75">
-              Your cloud workspace
-            </span>
-            <span className="flex items-center gap-2 text-xs text-white/80">
-              <span className="size-2 rounded-full bg-green-300" />
-              Built for autonomous work
-            </span>
-          </div>
-
-          <div className="grid gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
-            <nav aria-label="Mobile navigation" className="flex flex-col">
-              {navigation.map((item, index) => (
-                <a
-                  key={item.label}
-                  href={item.href}
-                  tabIndex={isOpen ? 0 : -1}
-                  onClick={() => setIsOpen(false)}
-                  className="group flex items-center justify-between border-b border-white/20 py-3 text-4xl font-medium tracking-tight transition-opacity hover:opacity-65 sm:text-5xl lg:text-6xl"
-                >
-                  <span>{item.label}</span>
-                  <span className="text-xl transition-transform group-hover:-translate-y-1 group-hover:translate-x-1">
-                    ↗
-                  </span>
-                </a>
-              ))}
-
-              <div className="mt-8 flex flex-wrap gap-3">
-                <a
-                  href={loginHref}
-                  tabIndex={isOpen ? 0 : -1}
-                  onClick={() => setIsOpen(false)}
-                  className="rounded-xl border border-white/40 px-5 py-3 font-medium transition-colors hover:bg-white/10"
-                >
-                  Log in
-                </a>
-                <a
-                  href={signupHref}
-                  tabIndex={isOpen ? 0 : -1}
-                  onClick={() => setIsOpen(false)}
-                  className="rounded-xl bg-white px-5 py-3 font-semibold text-neutral-950 transition-transform hover:scale-[1.02]"
-                >
-                  Start building <span aria-hidden="true">↗</span>
-                </a>
-              </div>
-            </nav>
-
-            {/* Product preview */}
-            <div className="rounded-2xl border border-white/25 bg-black/10 p-5 sm:p-7">
-              <div className="mb-6 flex items-center justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.16em] text-white/65">
-                    Agent workspace
-                  </p>
-                  <h2 className="mt-2 text-xl font-semibold">
-                    From prompt to progress.
-                  </h2>
-                </div>
-                <div className="rounded-lg border border-white/25 p-2 text-lg">
-                  ↗
-                </div>
-              </div>
-
-              <div className="rounded-xl bg-neutral-950 p-4 sm:p-5">
-                <div className="mb-5 flex items-center gap-2 text-xs text-neutral-400">
-                  <span className="size-2 rounded-full bg-green-400" />
-                  Cloud agent / workspace-01
-                </div>
-
-                <p className="mb-4 text-sm leading-6 text-neutral-200">
-                  &quot;Build an authentication flow, add tests, and open a pull
-                  request.&quot;
-                </p>
-
-                <div className="space-y-3 border-t border-white/10 pt-4">
-                  {[
-                    ["01", "Inspecting codebase", "Done"],
-                    ["02", "Implementing changes", "Running"],
-                    ["03", "Testing and review", "Queued"],
-                  ].map(([number, title, status]) => (
-                    <div
-                      key={number}
-                      className="flex items-center gap-3 text-sm"
-                    >
-                      <span className="text-neutral-500">{number}</span>
-                      <span className="flex-1 text-neutral-200">{title}</span>
-                      <span
-                        className={
-                          status === "Done"
-                            ? "text-green-400"
-                            : status === "Running"
-                              ? "text-orange-300"
-                              : "text-neutral-500"
-                        }
-                      >
-                        {status}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <p className="mt-4 text-sm leading-6 text-white/75">
-                Delegate tasks to cloud agents, monitor execution, and keep your
-                development workflow moving.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-col justify-between gap-3 border-t border-white/25 pt-5 text-sm text-white/75 sm:flex-row">
-            <span>{brand} — Your AI-powered cloud workforce.</span>
-            <a
-              href="/docs"
-              tabIndex={isOpen ? 0 : -1}
-              className="transition-colors hover:text-white"
+          {activeMenu && (
+            <div
+              ref={contentRef}
+              className="grid gap-5 p-4 sm:p-6 lg:grid-cols-[0.85fr_1.5fr] lg:gap-8 lg:p-8"
             >
-              Explore the documentation ↗
-            </a>
-          </div>
+              {/* Intro panel */}
+              <div
+                data-menu-item
+                className="flex flex-col items-start justify-between gap-8 rounded-xl border border-orange-100 bg-gradient-to-br from-orange-50 via-[#F9F5F0] to-white p-5 sm:p-6"
+              >
+                <div>
+                  <span className="mb-4 inline-flex items-center gap-2 text-[10px] font-semibold tracking-[0.18em] text-orange-700">
+                    <Sparkles size={13} />
+                    {dropdowns[activeMenu].eyebrow}
+                  </span>
+
+                  <h2 className="max-w-xs text-[24px] font-medium leading-tight tracking-[-1px] text-neutral-900 sm:text-[27px]">
+                    {dropdowns[activeMenu].title}
+                  </h2>
+
+                  <p className="mt-3 max-w-sm text-[13px] leading-6 text-neutral-500">
+                    {dropdowns[activeMenu].description}
+                  </p>
+                </div>
+
+                <Link
+                  href="#product"
+                  onClick={closeAll}
+                  className="group inline-flex items-center gap-2 text-[12px] font-medium text-neutral-800 transition-colors hover:text-orange-600"
+                >
+                  Explore Kairo
+                  <ArrowRight
+                    size={14}
+                    className="transition-transform duration-300 group-hover:translate-x-1"
+                  />
+                </Link>
+              </div>
+
+              {/* Animated navigation items */}
+              <div className="grid content-start gap-1 sm:grid-cols-2">
+                {dropdowns[activeMenu].items.map((item) => {
+                  const Icon = item.icon;
+
+                  return (
+                    <Link
+                      key={item.title}
+                      href={item.href}
+                      data-menu-item
+                      onClick={closeAll}
+                      className="group flex gap-3 rounded-xl p-3 transition-colors duration-200 hover:bg-orange-50/80 sm:p-4"
+                    >
+                      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-neutral-200/80 bg-white text-neutral-600 shadow-sm transition-all duration-300 group-hover:border-orange-200 group-hover:bg-orange-100/70 group-hover:text-orange-700">
+                        <Icon size={18} strokeWidth={1.7} />
+                      </span>
+
+                      <span className="min-w-0 pt-0.5">
+                        <span className="flex items-center gap-1.5 text-[13px] font-medium text-neutral-800">
+                          {item.title}
+                          <ArrowUpRight
+                            size={12}
+                            className="opacity-0 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:opacity-70"
+                          />
+                        </span>
+
+                        <span className="mt-1 block text-[11px] leading-[1.8] text-neutral-500">
+                          {item.description}
+                        </span>
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Mobile navigation */}
+        <div
+          className={`overflow-hidden border-t border-neutral-200/80 transition-[max-height,opacity] duration-300 ease-out lg:hidden ${
+            mobileOpen
+              ? "max-h-[75vh] overflow-y-auto opacity-100"
+              : "max-h-0 border-t-0 opacity-0"
+          }`}
+        >
+          <nav aria-label="Mobile navigation" className="space-y-1 p-3">
+            {navigation.map((item) => {
+              if (item.type === "link") {
+                return (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    onClick={closeAll}
+                    className="block rounded-xl px-3 py-3 text-sm text-neutral-600 transition-colors hover:bg-orange-50 hover:text-orange-700"
+                  >
+                    {item.label}
+                  </Link>
+                );
+              }
+
+              const name = item.label as MenuName;
+              const expanded = activeMenu === name;
+
+              return (
+                <div key={item.label}>
+                  <button
+                    type="button"
+                    aria-expanded={expanded}
+                    onClick={() => toggleMenu(name)}
+                    className="flex w-full items-center justify-between rounded-xl px-3 py-3 text-sm text-neutral-600 transition-colors hover:bg-orange-50 hover:text-orange-700"
+                  >
+                    {item.label}
+                    <ChevronDown
+                      size={15}
+                      className={`transition-transform duration-300 ${
+                        expanded ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+
+                  <div
+                    className={`grid transition-[grid-template-rows,opacity] duration-300 ${
+                      expanded
+                        ? "grid-rows-[1fr] opacity-100"
+                        : "grid-rows-[0fr] opacity-0"
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="ml-3 space-y-1 border-l border-orange-200 py-1 pl-3">
+                        {dropdowns[name].items.map((subItem) => (
+                          <Link
+                            key={subItem.title}
+                            href={subItem.href}
+                            onClick={closeAll}
+                            className="block rounded-lg px-3 py-2.5 text-[13px] text-neutral-500 hover:bg-orange-50 hover:text-orange-700"
+                          >
+                            {subItem.title}
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            <div className="grid grid-cols-2 gap-3 border-t border-neutral-200 pt-4">
+              <Link
+                href={loginHref}
+                onClick={closeAll}
+                className="rounded-xl border border-neutral-200 py-3 text-center text-sm text-neutral-700"
+              >
+                Log in
+              </Link>
+
+              <Link
+                href={signupHref}
+                onClick={closeAll}
+                className="rounded-xl bg-neutral-950 py-3 text-center text-sm font-medium text-white transition-colors hover:bg-orange-600"
+              >
+                Start building
+              </Link>
+            </div>
+          </nav>
         </div>
       </div>
-    </>
+    </header>
   );
 }

@@ -1,3 +1,4 @@
+import StaticFooter from "@/components/footer/StaticFooter";
 import StaticNavbar from "@/components/navbar/StaticNav";
 
 export default function StaticLayout({
@@ -7,8 +8,9 @@ export default function StaticLayout({
 }>) {
   return (
     <>
-      <StaticNavbar brand="Hyperiux" loginHref="/login" signupHref="/signup" />
+      <StaticNavbar brand="Kairo" />
       <main>{children}</main>
+      <StaticFooter />
     </>
   );
 }
