@@ -1,4 +1,5 @@
-import { Writable } from "node:stream";
+﻿import { Writable } from "node:stream";
+import { randomUUID } from "node:crypto";
 import type { WritableStream } from "node:stream/web";
 import {
   DockerClient,
@@ -18,7 +19,8 @@ import {
   type Workspace,
   type WriteResult,
 } from "@kairo/agent";
-import { bufferToNodeReadable, bufferWritable, packFileTar, unpackFirstFileTar } from "./archive.js";
+import { bufferToNodeReadable, packFileTar, unpackFirstFileTar } from "./archive.js";
+import { getContainerArchiveRaw, NotFoundSignal, putContainerArchiveRaw } from "./http-bypass.js";
 import {
   containerNameFor,
   loadSandboxConfig,
@@ -328,6 +330,7 @@ export class DockerWorkspace implements Workspace {
       return { exitCode: null, stdout: "", stderr: "empty command", timedOut: false, truncated: false };
     }
     const { client } = await this.deps();
+    const execMarker = `kasx-${randomUUID()}`;
     const exec = await client.containerExec(this.containerName, {
       Cmd: cmd,
       AttachStdin: false,
@@ -336,7 +339,7 @@ export class DockerWorkspace implements Workspace {
       Tty: false,
       User: SANDBOX_UID_GID,
       WorkingDir: cwdAbs,
-      Env: [...config.execEnv],
+      Env: [...config.execEnv, `KAIRO_EXEC_ID=${execMarker}`],
     });
     const execId = exec.Id ?? "";
     const stdoutCapture = new CaptureWritable(maxOutputBytes);
@@ -344,7 +347,7 @@ export class DockerWorkspace implements Workspace {
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
-      void this.killTimedOutExec(client, execId, "process timed out").catch(() => undefined);
+      void this.killTimedOutExec(client, execMarker, "process timed out").catch(() => undefined);
     }, timeoutMs);
     try {
       await client.execStart(execId, stdoutCapture, stderrCapture);
@@ -375,44 +378,25 @@ export class DockerWorkspace implements Workspace {
       limit?.maxBytes ?? this.overrides.maxReadBytes ?? config.maxReadBytes,
       this.overrides.maxReadBytes ?? config.maxReadBytes,
     );
-    let size: number | undefined;
+    let raw: Awaited<ReturnType<typeof getContainerArchiveRaw>>;
     try {
-      const info = await client.containerArchiveInfo(this.containerName, abs);
-      size = info.size;
-      const mode = info.mode ?? 0;
-      if ((mode & 0o170000) === 0o040000) {
-        throw new WorkspaceError(`path is a directory: ${rawPath}`, "IS_DIRECTORY");
-      }
-      const linkTarget = info.linkTarget ?? "";
-      if (linkTarget !== "" && !linkTarget.startsWith(`${WORKSPACE_ROOT}/`)) {
-        throw new WorkspaceError("symlink points outside the workspace", "SYMLINK_ESCAPE");
-      }
+      raw = await getContainerArchiveRaw(client, this.containerName, abs, maxBytes);
     } catch (error) {
-      if (isNotFound(error)) {
+      if (error instanceof NotFoundSignal) {
         throw new WorkspaceError(`no such file: ${rawPath}`, "NOT_FOUND");
       }
       throw error;
     }
-    const sink = bufferWritable(maxBytes);
-    try {
-      await client.containerArchive(this.containerName, abs, sink.stream);
-    } catch (error) {
-      if (isNotFound(error)) {
-        throw new WorkspaceError(`no such file: ${rawPath}`, "NOT_FOUND");
-      }
-      throw error;
-    }
-    const tar = await sink.take();
-    const bytes = await unpackFirstFileTar(tar, maxBytes);
-    const truncated = size !== undefined && size > maxBytes;
-    const content = bytes.toString("utf8");
-    if (truncated && size !== undefined) {
+    const unpacked = await unpackFirstFileTar(raw.buffer, maxBytes);
+    const content = unpacked.bytes.toString("utf8");
+    const truncated = unpacked.truncatedTar;
+    if (truncated) {
       return {
-        content: `${content}\n\n[truncated: file is ${size} bytes, showing first ${maxBytes}]`,
+        content: `${content}\n\n[truncated: file exceeds the ${maxBytes} byte read cap]`,
         truncated: true,
       };
     }
-    return { content, truncated };
+    return { content, truncated: false };
   }
 
   async writeFile(rawPath: string, content: string): Promise<WriteResult> {
@@ -429,8 +413,8 @@ export class DockerWorkspace implements Workspace {
     await this.ensureRunning();
     const { client } = await this.deps();
     const rel = abs.slice(`${WORKSPACE_ROOT}/`.length);
-    const tar = await packFileTar(rel, Buffer.from(content, "utf8"));
-    await client.putContainerArchive(this.containerName, WORKSPACE_ROOT, bufferToNodeReadable(tar), {
+    const tarBuffer = await packFileTar(rel, Buffer.from(content, "utf8"));
+    await putContainerArchiveRaw(client, this.containerName, WORKSPACE_ROOT, bufferToNodeReadable(tarBuffer), {
       copyUIDGID: "true",
     });
     return { bytes };
@@ -564,40 +548,39 @@ export class DockerWorkspace implements Workspace {
   }
 
   /**
-   * Best-effort kill of a hanging exec's processgroup: docker exposes the
-   * exec's in-container Pid via inspect; a sibling exec runs
-   * `kill -9 -<pid>` (group: children share the exec's pgid) and falls back
-   * to `kill -9 <pid>`. Everything is swallowed — the killed exec's socket
-   * closing is what unblocks the caller, not this helper's exit status.
+   * Best-effort kill of a hanging exec discovered via its unique env marker
+   * (ExecInspect's Pid is a host-level pid â€” useless inside the container's
+   * namespace). The scanner exec reads /proc envelopes for the marker and
+   * SIGKILLs the matching process group (the shim gives every exec its own
+   * pgid), which sweeps spawned children too.
    */
-  private async killTimedOutExec(client: DockerClientInstance, execId: string, note: string): Promise<void> {
+  private async killTimedOutExec(client: DockerClientInstance, execMarker: string, note: string): Promise<void> {
+    const script = [
+      `MARKER=${JSON.stringify(execMarker)}`,
+      'for d in /proc/[0-9]*; do',
+      '  if [ -r "$d/environ" ]; then',
+      '    if grep -aq "$MARKER" "$d/environ" 2>/dev/null; then',
+      '      pid=$(basename "$d")',
+      '      kill -9 -- "-$pid" 2>/dev/null',
+      '      kill -9 "$pid" 2>/dev/null',
+      '    fi',
+      '  fi',
+      'done',
+    ].join("\n");
     try {
-      const inspect = await client.execInspect(execId);
-      const pid = inspect.Pid;
-      if (!pid || pid <= 1) return;
-      const attempts: string[][] = [
-        ["kill", "-9", `-${pid}`],
-        ["kill", "-9", String(pid)],
-      ];
-      for (const cmd of attempts) {
-        try {
-          const killer = await client.containerExec(this.containerName, {
-            Cmd: cmd,
-            AttachStdin: false,
-            AttachStdout: false,
-            AttachStderr: false,
-            Tty: false,
-            User: SANDBOX_UID_GID,
-          });
-          await client.execStart(killer.Id ?? "", null, null, { Detach: true });
-        } catch {
-          // last attempt may have killed it already, or it died on its own
-        }
-      }
-      void note;
+      const killer = await client.containerExec(this.containerName, {
+        Cmd: ["bash", "-c", script],
+        AttachStdin: false,
+        AttachStdout: false,
+        AttachStderr: false,
+        Tty: false,
+        User: SANDBOX_UID_GID,
+      });
+      await client.execStart(killer.Id ?? "", null, null, { Detach: true });
     } catch {
-      // container gone / exec gone — the timed-out exec ended on its own
+      // Everything is best-effort: the caller waits for socket close either way.
     }
+    void note;
   }
 
   private async execExitCode(client: DockerClientInstance, execId: string): Promise<number | null> {
@@ -619,7 +602,7 @@ export class DockerWorkspace implements Workspace {
     }
   }
 
-  /** Polls until the container exits or disappears (AutoRemove → 404). */
+  /** Polls until the container exits or disappears (AutoRemove â†’ 404). */
   private async waitExited(client: DockerClientInstance, id: string): Promise<void> {
     const deadline = Date.now() + WAIT_EXITED_DEADLINE_MS;
     for (;;) {

@@ -131,7 +131,7 @@ export default function FAQSection() {
         </div>
 
         <div data-faq-reveal>
-          <Accordion type="single" collapsible className="w-full">
+          <Accordion className="w-full">
             {questions.map((item, index) => (
               <AccordionItem
                 key={item.question}

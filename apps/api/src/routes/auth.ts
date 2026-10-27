@@ -104,6 +104,16 @@ function redirectToLogin(res: Response, code: string): void {
 }
 
 // ── Start the GitHub OAuth flow ─────────────────────────────────────
+// ── GitHub App metadata ─────────────────────────────────────────────
+// Lets the web app build the "install this App on your repositories" link
+// without knowing the App slug itself.
+authRouter.get("/github-app", (req, res) => {
+  res.json({
+    appUrl: `https://github.com/apps/${env.GITHUB_APP_SLUG}`,
+    installUrl: `https://github.com/apps/${env.GITHUB_APP_SLUG}/installations/new`,
+  });
+});
+
 authRouter.get("/github", oauthStartRateLimiter, (req, res, next) => {
   try {
     const state = randomToken();

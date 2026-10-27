@@ -1,0 +1,99 @@
+[
+  {
+    "name": "ensureRunning boot",
+    "ok": true,
+    "note": "kairo-sbx-check-sandbox-run (reused=true, 88ms)"
+  },
+  {
+    "name": "status running",
+    "ok": true
+  },
+  {
+    "name": "writeFile",
+    "ok": true,
+    "note": "20 bytes"
+  },
+  {
+    "name": "readFile roundtrip",
+    "ok": true,
+    "note": "exact match"
+  },
+  {
+    "name": "writeFile deep dirs",
+    "ok": true
+  },
+  {
+    "name": "reject ../escape.txt",
+    "ok": true,
+    "note": "code=TRAVERSAL"
+  },
+  {
+    "name": "reject /etc/passwd",
+    "ok": true,
+    "note": "code=ABSOLUTE_PATH"
+  },
+  {
+    "name": "reject a/../../b.txt",
+    "ok": true,
+    "note": "code=TRAVERSAL"
+  },
+  {
+    "name": "reject C:/x.txt",
+    "ok": true,
+    "note": "code=ABSOLUTE_PATH"
+  },
+  {
+    "name": "all traversal rejects",
+    "ok": true
+  },
+  {
+    "name": "readFile missing rejects",
+    "ok": true
+  },
+  {
+    "name": "exec argv",
+    "ok": true
+  },
+  {
+    "name": "exec shell string",
+    "ok": true
+  },
+  {
+    "name": "exec exit code",
+    "ok": true
+  },
+  {
+    "name": "exec cwd",
+    "ok": true,
+    "note": "/workspace/src"
+  },
+  {
+    "name": "toolchain node/git/rg",
+    "ok": true,
+    "note": "v22.23.4 | git version 2.39.5 | 13.0.0\n-SIMD"
+  },
+  {
+    "name": "exec timeout kill",
+    "ok": true,
+    "note": "1732ms, exit=137"
+  },
+  {
+    "name": "listFiles includes written files",
+    "ok": true,
+    "note": "6 entries"
+  },
+  {
+    "name": "searchCode fixed string",
+    "ok": true,
+    "note": "1 hits"
+  },
+  {
+    "name": "searchCode regex",
+    "ok": true,
+    "note": "1 hits"
+  },
+  {
+    "name": "volume persists across stop/start",
+    "ok": true
+  }
+]

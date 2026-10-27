@@ -106,30 +106,59 @@ export function bufferWritable(maxBytes: number): {
 }
 
 /**
- * Reads the first regular-file entry out of a single-file tar (what
- * `containerArchive(path=...)` emits), capped at `maxBytes`. The remainder
- * of the archive is drained so the extract stream reaches completion.
+ * Reads the first entry of a single-path tar (what `containerArchive(path=…)`
+ * emits), capped at `maxBytes`. All classification comes from the tar header
+ * itself — the daemon's X-Docker-Container-Path-Stat header is not reliably
+ * present (notably on Docker Desktop), and 404s do not throw: the error body
+ * simply replaces the archive, which shows up as "no entries".
+ *
+ * Directory entries throw IS_DIRECTORY; symlinks whose target escapes
+ * /workspace throw SYMLINK_ESCAPE.
  */
-export function unpackFirstFileTar(tarBuffer: Buffer, maxBytes: number): Promise<Buffer> {
+export interface TarFileResult {
+  bytes: Buffer;
+  truncatedTar: boolean;
+}
+
+export async function unpackFirstFileTar(
+  tarBuffer: Buffer,
+  maxBytes: number,
+): Promise<TarFileResult> {
   const chunks: Buffer[] = [];
   let captured = 0;
+  let sawFile = false;
+  let sawAny = false;
+  let truncatedTar = false;
   const tarStream = extract();
-  const done = new Promise<Buffer>((resolve, reject) => {
+  const done = new Promise<TarFileResult>((resolve, reject) => {
     tarStream.on("error", (error: Error) => {
       reject(error instanceof WorkspaceError ? error : new WorkspaceError(error.message));
     });
     tarStream.on("entry", (header, entryStream, next: () => void) => {
-      if (chunks.length > 0) {
-        // Already have our file; keep everything else flowing to /dev/null.
+      sawAny = true;
+      if (sawFile) {
+        // Keep everything else flowing to /dev/null.
         entryStream.resume();
         next();
+        return;
+      }
+      if (header.type === "directory") {
+        reject(new WorkspaceError("path is a directory", "IS_DIRECTORY"));
         return;
       }
       if (header.type !== "file") {
-        entryStream.resume();
-        next();
+        // symlink etc: check escape target (linkname may be null for plain files)
+        const link = header.linkname ?? "";
+        if (header.type === "symlink" && link !== "" && !link.startsWith("/workspace/") && link.startsWith("/") ) {
+          reject(new WorkspaceError("symlink points outside the workspace", "SYMLINK_ESCAPE"));
+          return;
+        }
+        // Non-file, non-directory first entries are not readable content.
+        reject(new WorkspaceError("path is not a regular file", "NOT_A_FILE"));
         return;
       }
+      sawFile = true;
+      const declared = header.size ?? 0;
       entryStream.on("data", (chunk: unknown) => {
         const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array);
         const remaining = maxBytes - captured;
@@ -137,17 +166,31 @@ export function unpackFirstFileTar(tarBuffer: Buffer, maxBytes: number): Promise
         if (buf.length > remaining) {
           chunks.push(buf.subarray(0, remaining));
           captured += remaining;
+          truncatedTar = true;
           return;
         }
         chunks.push(buf);
         captured += buf.length;
       });
-      entryStream.on("end", next);
+      entryStream.on("end", () => {
+        if (declared > captured && captured < maxBytes) {
+          // Should not happen for well-formed archives, but flag it.
+          truncatedTar = true;
+        }
+        next();
+      });
       entryStream.on("error", (error: Error) => {
         reject(new WorkspaceError(error.message));
       });
     });
-    tarStream.on("finish", () => resolve(Buffer.concat(chunks)));
+    tarStream.on("finish", () => {
+      if (!sawAny) {
+        reject(new WorkspaceError("no such file", "NOT_FOUND"));
+        return;
+      }
+      if (!sawFile) return; // a rejection is already pending
+      resolve({ bytes: Buffer.concat(chunks), truncatedTar });
+    });
   });
   PassThrough.from([tarBuffer]).pipe(tarStream);
   return done;

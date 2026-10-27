@@ -1,6 +1,8 @@
 import { env } from "../config/env.js";
 
-export const GITHUB_SCOPES = "read:user user:email repo";
+// GitHub Apps do not accept a `scope` query parameter (permissions are defined
+// in the App settings); classic OAuth Apps take a space-separated list here.
+export const GITHUB_SCOPES = env.GITHUB_OAUTH_SCOPES;
 const REQUEST_TIMEOUT_MS = 15_000;
 const GITHUB_API_VERSION = "2022-11-28";
 
@@ -32,7 +34,10 @@ export function buildAuthorizeUrl({
   const url = new URL(env.GITHUB_AUTHORIZE_URL);
   url.searchParams.set("client_id", env.GITHUB_CLIENT_ID);
   url.searchParams.set("redirect_uri", redirectUri);
-  url.searchParams.set("scope", GITHUB_SCOPES);
+  // GitHub Apps reject the authorize URL when a scope parameter is present.
+  if (GITHUB_SCOPES.trim() !== "") {
+    url.searchParams.set("scope", GITHUB_SCOPES.trim());
+  }
   url.searchParams.set("state", state);
   url.searchParams.set("code_challenge", codeChallenge);
   url.searchParams.set("code_challenge_method", "S256");

@@ -32,6 +32,15 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   GITHUB_CLIENT_ID: z.string().min(1, "GITHUB_CLIENT_ID is required"),
   GITHUB_CLIENT_SECRET: z.string().min(1, "GITHUB_CLIENT_SECRET is required"),
+  // Slug of the Kairo GitHub App (https://github.com/apps/<slug>). Empty when
+  // sign-in still runs with a classic OAuth App.
+  GITHUB_APP_SLUG: z.string().trim().min(1).default("kairo"),
+  // Space-separated scopes for classic OAuth Apps. Leave empty for GitHub
+  // Apps — permissions come from the App settings and must NOT be set here.
+  GITHUB_OAUTH_SCOPES: z
+    .string()
+    .regex(/^$|^[\w: -]+$/, "must be empty or space-separated scope words")
+    .default(""),
   TOKEN_ENCRYPTION_KEY: base64Key32,
   SESSION_SECRET: z.string().min(32, "SESSION_SECRET must be at least 32 chars"),
   SESSION_TTL_HOURS: z.coerce.number().int().positive().default(720),

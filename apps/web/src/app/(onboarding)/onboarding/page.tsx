@@ -1,15 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { gsap } from "gsap";
 import {
   ArrowRight,
   CircleCheck,
+  ExternalLink,
   FolderGit2,
   Loader2,
   Mail,
   ShieldCheck,
+  Sparkles,
   UserRound,
 } from "lucide-react";
 import { AuthCard, Spinner } from "@/components/auth-card";
@@ -20,29 +23,31 @@ import { cn, safeAvatarUrl } from "@/lib/utils";
 const STEPS: Array<{ key: OnboardingStep; label: string }> = [
   { key: "WELCOME", label: "Welcome" },
   { key: "PROFILE", label: "Profile" },
-  { key: "PERMISSIONS", label: "Permissions" },
+  { key: "PERMISSIONS", label: "App install" },
   { key: "DONE", label: "Done" },
 ];
 
-const PERMISSIONS = [
-  {
-    icon: UserRound,
-    scope: "read:user",
-    title: "Read your profile",
-    description: "Your name, handle and avatar — so Kairo shows who is running it.",
-  },
-  {
-    icon: Mail,
-    scope: "user:email",
-    title: "Read your primary verified email",
-    description: "Used only to notify you about runs that need your attention.",
-  },
+const APP_PERMISSIONS = [
   {
     icon: FolderGit2,
-    scope: "repo",
-    title: "Read and write your repositories",
+    slug: "contents + worktrees",
+    title: "Read and write code",
     description:
-      "Lets Kairo read code, push branches and open pull requests for the issues it fixes.",
+      "Kairo reads your codebase, pushes fix branches and opens pull requests through its GitHub App installation.",
+  },
+  {
+    icon: ShieldCheck,
+    slug: "issues + PRs",
+    title: "See issues, answer reviews",
+    description:
+      "It picks up the issues you assign and follows review comments until the PR is merged or closed.",
+  },
+  {
+    icon: UserRound,
+    slug: "installation token",
+    title: "Scoped tokens only",
+    description:
+      "No personal passwords: the App talks with short-lived installation access tokens tied to the chosen repositories.",
   },
 ] as const;
 
@@ -61,14 +66,14 @@ function Avatar({ user, size }: { user: PublicUser; size: number }) {
         alt={user.username}
         width={size}
         height={size}
-        className="rounded-full border border-border/60"
+        className="rounded-full border border-white/15"
       />
     );
   }
 
   return (
     <div
-      className="flex items-center justify-center rounded-full border border-border/60 bg-muted font-semibold text-muted-foreground"
+      className="flex items-center justify-center rounded-full border border-white/15 bg-neutral-800 font-semibold text-neutral-300"
       style={{ width: size, height: size }}
     >
       {user.username.slice(0, 1).toUpperCase()}
@@ -85,16 +90,16 @@ function Progress({ index }: { index: number }) {
             key={step.key}
             className={cn(
               "h-1 flex-1 rounded-full transition-colors",
-              i <= index ? "bg-primary" : "bg-muted",
+              i <= index ? "bg-orange-500" : "bg-white/10",
             )}
           />
         ))}
       </div>
       <div className="flex items-center justify-between text-xs">
-        <span className="text-muted-foreground">
+        <span className="text-neutral-400">
           Step {index + 1} of {STEPS.length}
         </span>
-        <span className="font-medium">{STEPS[index].label}</span>
+        <span className="font-medium text-orange-400">{STEPS[index].label}</span>
       </div>
     </div>
   );
@@ -104,9 +109,11 @@ export default function OnboardingPage() {
   const router = useRouter();
   const [user, setUser] = useState<PublicUser | null>(null);
   const [index, setIndex] = useState(0);
+  const [installUrl, setInstallUrl] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(
     () =>
@@ -133,7 +140,32 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     void load();
+    auth
+      .githubApp()
+      .then((app) => setInstallUrl(app.installUrl))
+      .catch(() => undefined);
   }, [load]);
+
+  // Animate each step panel in.
+  useEffect(() => {
+    if (!panelRef.current) return;
+    const ctx = gsap.context(() => {
+      gsap.from(".onboard-line", {
+        y: 18,
+        opacity: 0,
+        stagger: 0.08,
+        duration: 0.55,
+        ease: "power3.out",
+      });
+      gsap.from(".onboard-panel", {
+        scale: 0.985,
+        opacity: 0,
+        duration: 0.45,
+        ease: "power2.out",
+      });
+    }, panelRef);
+    return () => ctx.revert();
+  }, [index]);
 
   const nextStep = STEPS[index + 1];
 
@@ -157,9 +189,13 @@ export default function OnboardingPage() {
   if (loadError) {
     return (
       <AuthCard className="max-w-sm space-y-4">
-        <h1 className="text-xl font-semibold">Something went wrong</h1>
-        <p className="text-sm text-muted-foreground">{loadError}</p>
-        <Button className="w-full" variant="outline" onClick={() => void load()}>
+        <h1 className="text-xl font-semibold text-white">Something went wrong</h1>
+        <p className="text-sm text-neutral-400">{loadError}</p>
+        <Button
+          className="w-full cursor-pointer rounded-xl bg-neutral-950 text-white hover:bg-orange-500"
+          variant="outline"
+          onClick={() => void load()}
+        >
           Try again
         </Button>
       </AuthCard>
@@ -169,26 +205,26 @@ export default function OnboardingPage() {
   if (!user) {
     return (
       <AuthCard className="max-w-sm">
-        <Spinner className="mx-auto size-5 text-muted-foreground" />
+        <Spinner className="mx-auto size-5 text-neutral-400" />
       </AuthCard>
     );
   }
 
   return (
     <AuthCard>
-      <div className="space-y-8">
+      <div ref={panelRef} className="space-y-8">
         <Progress index={index} />
 
         <div className="space-y-4">
           {index === 0 ? (
-            <div className="space-y-3">
-              <div className="mx-auto flex size-12 items-center justify-center rounded-full border border-border/60 bg-muted">
-                <ShieldCheck className="size-6" />
+            <div className="onboard-panel space-y-3">
+              <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-lg shadow-orange-500/40">
+                <Sparkles className="size-6" />
               </div>
-              <h1 className="text-2xl font-bold tracking-tight">
+              <h1 className="onboard-line text-2xl font-bold tracking-tight text-white">
                 Welcome to Kairo
               </h1>
-              <p className="text-sm text-muted-foreground">
+              <p className="onboard-line text-sm text-neutral-300">
                 Point Kairo at a GitHub issue and it reads the codebase, writes
                 the fix, opens a PR and handles review comments — while you work
                 on something else.
@@ -197,27 +233,27 @@ export default function OnboardingPage() {
           ) : null}
 
           {index === 1 ? (
-            <div className="space-y-4">
-              <h1 className="text-2xl font-bold tracking-tight">
+            <div className="onboard-panel space-y-4">
+              <h1 className="onboard-line text-2xl font-bold tracking-tight text-white">
                 Confirm your profile
               </h1>
-              <div className="flex items-center gap-3 rounded-lg border border-border/60 bg-muted/40 p-3 text-left">
+              <div className="onboard-line flex items-center gap-3 rounded-xl border border-white/10 bg-neutral-800/60 p-3 text-left">
                 <Avatar user={user} size={44} />
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold">
+                  <p className="truncate text-sm font-semibold text-white">
                     {user.name ?? user.username}
                   </p>
-                  <p className="truncate text-xs text-muted-foreground">
+                  <p className="truncate text-xs text-neutral-400">
                     @{user.username}
                   </p>
                 </div>
               </div>
-              <div className="space-y-1 text-left text-sm text-muted-foreground">
+              <div className="onboard-line space-y-1 text-left text-sm text-neutral-300">
                 <p className="flex items-center gap-2">
                   <Mail className="size-4 shrink-0" />
                   {user.email ?? "No public email on this account"}
                 </p>
-                <p className="text-xs">
+                <p className="text-xs text-neutral-400">
                   This is the GitHub identity Kairo will act as.
                 </p>
               </div>
@@ -225,52 +261,70 @@ export default function OnboardingPage() {
           ) : null}
 
           {index === 2 ? (
-            <div className="space-y-4">
-              <h1 className="text-2xl font-bold tracking-tight">
-                What Kairo asks for
+            <div className="onboard-panel space-y-4">
+              <h1 className="onboard-line text-2xl font-bold tracking-tight text-white">
+                Install the Kairo GitHub App
               </h1>
-              <p className="text-sm text-muted-foreground">
-                Kairo requested exactly three scopes from GitHub:
+              <p className="onboard-line text-sm text-neutral-300">
+                Sign-in already runs through Kairo&rsquo;s GitHub App. Finish by
+                installing it on the repositories the agent should work in.
               </p>
-              <ul className="space-y-3 text-left">
-                {PERMISSIONS.map(({ icon: Icon, scope, title, description }) => (
-                  <li key={scope} className="flex gap-3">
-                    <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted">
+              <ul className="onboard-line space-y-3 text-left">
+                {APP_PERMISSIONS.map(({ icon: Icon, slug, title, description }) => (
+                  <li key={slug} className="flex gap-3">
+                    <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-neutral-800/60 text-orange-400">
                       <Icon className="size-4" />
                     </span>
                     <span className="min-w-0">
-                      <span className="block text-sm font-medium">
+                      <span className="block text-sm font-medium text-white">
                         {title}{" "}
-                        <code className="rounded bg-muted px-1 py-0.5 text-xs text-muted-foreground">
-                          {scope}
+                        <code className="rounded bg-neutral-800 px-1 py-0.5 font-mono text-xs text-neutral-400">
+                          {slug}
                         </code>
                       </span>
-                      <span className="block text-xs text-muted-foreground">
+                      <span className="block text-xs text-neutral-400">
                         {description}
                       </span>
                     </span>
                   </li>
                 ))}
               </ul>
-              <p className="text-xs text-muted-foreground">
-                You can revoke access at any time under GitHub → Settings →
-                Applications.
+              {installUrl ? (
+                <a
+                  href={installUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="onboard-line flex items-center justify-between rounded-xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-left text-sm text-orange-300 transition-colors hover:bg-orange-500/20"
+                >
+                  <span>
+                    <span className="block font-medium">Install on GitHub ↗</span>
+                    <span className="block text-xs text-orange-300/70">
+                      opens github.com — pick the repos, then come back here
+                    </span>
+                  </span>
+                  <ExternalLink className="size-4" />
+                </a>
+              ) : null}
+              <p className="onboard-line text-xs text-neutral-500">
+                You can manage or remove the installation anytime under GitHub →
+                Settings → Installed GitHub Apps. Kairo never stores personal
+                tokens beyond its App installation.
               </p>
             </div>
           ) : null}
 
           {index === 3 ? (
-            <div className="space-y-3">
-              <div className="mx-auto flex size-12 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
+            <div className="onboard-panel space-y-3">
+              <div className="mx-auto flex size-12 items-center justify-center rounded-2xl border border-emerald-500/30 bg-emerald-500/15 text-emerald-400">
                 <CircleCheck className="size-6" />
               </div>
-              <h1 className="text-2xl font-bold tracking-tight">
+              <h1 className="onboard-line text-2xl font-bold tracking-tight text-white">
                 You&rsquo;re all set
               </h1>
-              <p className="text-sm text-muted-foreground">
+              <p className="onboard-line text-sm text-neutral-300">
                 Kairo is connected to{" "}
-                <span className="text-foreground">@{user.username}</span>. Head
-                to the dashboard to see what it is doing.
+                <span className="text-white">@{user.username}</span>. Head to the
+                dashboard to see what it is doing.
               </p>
             </div>
           ) : null}
@@ -280,14 +334,19 @@ export default function OnboardingPage() {
           {actionError ? (
             <p
               role="alert"
-              className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400"
             >
               {actionError}
             </p>
           ) : null}
 
           {index < STEPS.length - 1 ? (
-            <Button className="w-full" size="lg" disabled={busy} onClick={() => void advance()}>
+            <Button
+              className="w-full cursor-pointer rounded-xl bg-orange-500 text-white hover:bg-orange-400"
+              size="lg"
+              disabled={busy}
+              onClick={() => void advance()}
+            >
               {busy ? <Loader2 className="mr-2 animate-spin" /> : null}
               {busy
                 ? "Saving…"
@@ -295,12 +354,12 @@ export default function OnboardingPage() {
                   ? "Get started"
                   : index === 1
                     ? "That's me"
-                    : "I understand"}
+                    : "I installed the App"}
               {!busy ? <ArrowRight className="ml-2" /> : null}
             </Button>
           ) : (
             <Button
-              className="w-full"
+              className="w-full cursor-pointer rounded-xl bg-orange-500 text-white hover:bg-orange-400"
               size="lg"
               onClick={() => router.push("/dashboard")}
             >

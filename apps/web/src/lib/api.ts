@@ -11,6 +11,40 @@ export type PublicUser = {
   onboardingStep: OnboardingStep;
 };
 
+export type AgentEvent =
+  | { type: "plan"; plan: { approach: string; steps: { id: string; goal: string }[] } }
+  | { type: "text"; text: string }
+  | { type: "tool_call"; id: string; name: string; args: unknown }
+  | {
+      type: "tool_result";
+      id: string;
+      name: string;
+      ok: boolean;
+      output: unknown;
+      durationMs: number;
+    }
+  | { type: "replan"; reason: string }
+  | { type: "error"; code: string; message: string }
+  | {
+      type: "done";
+      status: "SUCCEEDED" | "FAILED" | "CANCELLED";
+      summary: string;
+      steps: number;
+      durationMs: number;
+      error?: { code: string; message: string };
+    };
+
+export type RunStatus = "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
+
+export type RunSummary = {
+  id: string;
+  status: RunStatus;
+  mode: string;
+  prompt: string;
+  createdAt: string;
+  finishedAt: string | null;
+};
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -78,6 +112,28 @@ export const auth = {
       method: "PATCH",
       body: JSON.stringify({ step }),
     }).then((r) => r.user),
+
+  /** Public GitHub App metadata (install links for the onboarding step). */
+  githubApp: () =>
+    apiFetch<{ appUrl: string; installUrl: string }>("/auth/github-app"),
+};
+
+export const runs = {
+  create: (input: { prompt: string; mode?: "CREATE" | "FIX" }) =>
+    apiFetch<{ runId: string; status: RunStatus }>("/runs", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+
+  list: () => apiFetch<{ runs: RunSummary[] }>("/runs").then((r) => r.runs),
+
+  get: (id: string) => apiFetch<{ run: RunSummary; steps: number }>(`/runs/${id}`),
+
+  cancel: (id: string) =>
+    apiFetch<{ ok: boolean }>(`/runs/${id}/cancel`, { method: "POST" }),
+
+  /** SSE endpoint (same-origin via the /api rewrite, cookies flow with it). */
+  eventsUrl: (id: string) => `/api/runs/${id}/events`,
 };
 
 export const apiUrl = API_URL;
