@@ -105,7 +105,7 @@ model Sandbox {
   containerName String   @unique
   /// sha256 of the per-container LLM proxy token (plaintext lives only in
   /// the container env; the proxy verifies by hashing the presented token).
-  llmTokenHash  String?
+  llmTokenHash  String?   @unique
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   lastActiveAt  DateTime @default(now())

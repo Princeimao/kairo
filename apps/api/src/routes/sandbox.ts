@@ -1,6 +1,6 @@
 ﻿import { Router, type Request } from "express";
 import { prisma } from "@kairo/db";
-import { DockerWorkspace } from "@kairo/sandbox";
+import { DockerWorkspace, containerNameFor, llmTokenFor, llmTokenHash } from "@kairo/sandbox";
 import { AppError } from "../middleware/error-handler.js";
 import { requireAuth } from "../middleware/auth.js";
 
@@ -52,8 +52,13 @@ sandboxRouter.post(
             image: running.image,
             volumeName: running.volumeName,
             containerName: running.containerName,
+            llmTokenHash: llmTokenHash(llmTokenFor(containerNameFor(userId))),
           },
-          update: { lastActiveAt: new Date(), image: running.image },
+          update: {
+            lastActiveAt: new Date(),
+            image: running.image,
+            llmTokenHash: llmTokenHash(llmTokenFor(containerNameFor(userId))),
+          },
         })
         .catch(() => undefined);
       res.status(202).json({

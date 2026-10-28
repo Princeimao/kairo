@@ -235,16 +235,16 @@ export type SandboxWhereUniqueInput = Prisma.AtLeast<{
   userId?: string
   volumeName?: string
   containerName?: string
+  llmTokenHash?: string
   AND?: Prisma.SandboxWhereInput | Prisma.SandboxWhereInput[]
   OR?: Prisma.SandboxWhereInput[]
   NOT?: Prisma.SandboxWhereInput | Prisma.SandboxWhereInput[]
   image?: Prisma.StringFilter<"Sandbox"> | string
-  llmTokenHash?: Prisma.StringNullableFilter<"Sandbox"> | string | null
   createdAt?: Prisma.DateTimeFilter<"Sandbox"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Sandbox"> | Date | string
   lastActiveAt?: Prisma.DateTimeFilter<"Sandbox"> | Date | string
   user?: Prisma.XOR<Prisma.UserScalarRelationFilter, Prisma.UserWhereInput>
-}, "id" | "userId" | "volumeName" | "containerName">
+}, "id" | "userId" | "volumeName" | "containerName" | "llmTokenHash">
 
 export type SandboxOrderByWithAggregationInput = {
   id?: Prisma.SortOrder
