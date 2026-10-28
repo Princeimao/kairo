@@ -1,22 +1,22 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { runs, type RunSummary } from "@/lib/api";
+import { sessions, type SessionSummary } from "@/lib/api";
 
 /** Custom event the agent console dispatches after creating/resuming a run. */
 export const RUNS_REFRESH_EVENT = "kairo:runs-changed";
 
 /**
- * Recent agent runs ("sessions"). Polled lightly and refreshed immediately
- * when the console announces a new run via RUNS_REFRESH_EVENT.
+ * Chat sessions (each holds many conversations). Polled lightly and refreshed
+ * immediately when the console announces a change via RUNS_REFRESH_EVENT.
  */
 export function useSessions() {
-  const [sessions, setSessions] = useState<RunSummary[]>([]);
+  const [sessionsList, setSessionsList] = useState<SessionSummary[]>([]);
 
   const refresh = useCallback(() => {
-    runs
+    sessions
       .list()
-      .then(setSessions)
+      .then(setSessionsList)
       .catch(() => undefined);
   }, []);
 
@@ -35,10 +35,10 @@ export function useSessions() {
     window.dispatchEvent(new Event(RUNS_REFRESH_EVENT));
   }, []);
 
-  return { sessions, refresh, announce } as const;
+  return { sessions: sessionsList, refresh, announce } as const;
 }
 
-/** Announce a run change without calling the hook. */
+/** Announce a session/run change without calling the hook. */
 export function announceRun(): void {
   window.dispatchEvent(new Event(RUNS_REFRESH_EVENT));
 }

@@ -7,34 +7,24 @@ import {
   CheckCircle2,
   CircleX,
   Terminal,
-  Wand2,
   Wrench,
   Loader2,
-  ChevronsRight,
   Ban,
+  GitPullRequestArrow,
+  PencilLine,
 } from "lucide-react";
 import PromptBar, { type PromptBarSendDetail } from "@/components/PromptBar";
 import ThoughtLine from "@/components/ThoughtLine";
 import { announceRun } from "@/lib/use-sessions";
 import { useRunStream } from "@/lib/use-run";
-import { runs } from "@/lib/api";
+import { conversations, runs, type ConversationMessage } from "@/lib/api";
 import { useSearchParams, useRouter } from "next/navigation";
-
-const MODELS = [
-  { key: "nemotron-nano", name: "Nemotron 3 Nano", tag: "planner" },
-  { key: "nemotron-super", name: "Nemotron 3 Super", tag: "executor" },
-];
 
 const COMMANDS = [
   {
     key: "fix",
     name: "/fix",
     description: "Run in FIX mode patch the codebase in place",
-  },
-  {
-    key: "plan",
-    name: "/plan",
-    description: "Describe the approach before touching files",
   },
 ];
 
@@ -56,42 +46,76 @@ export default function AgentPage() {
 }
 
 function AgentContent() {
-  const { view, start, cancel, reset, reopen, runIdRef } = useRunStream();
+  const {
+    view,
+    setView,
+    start,
+    sendToConversation,
+    cancel,
+    reset,
+    reopen,
+    runIdRef,
+  } = useRunStream();
   const searchParams = useSearchParams();
   const router = useRouter();
   const scrollRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
-  const [activeRunPrompt, setActiveRunPrompt] = useState<string | null>(null);
   const [draftTask, setDraftTask] = useState<string | null>(null);
+  const [history, setHistory] = useState<ConversationMessage[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const resumedRunRef = useRef<string | null>(null);
+  const loadedConversationRef = useRef<string | null>(null);
 
-  const streaming = activeRunPrompt !== null && view.status === "RUNNING";
-
+  const activeRunPrompt =
+    view.prompt !== "" ? view.prompt : (history[history.length - 1]?.role === "USER" ? history[history.length - 1]?.content : null);
+  const streaming = view.status === "RUNNING" || view.status === "WAITING";
   const working =
-    activeRunPrompt !== null &&
-    (view.status === "RUNNING" || (view.status === "WAITING" && !view.error));
+    streaming && !view.error;
   const toolLines = view.tools;
 
+  // Load a conversation thread from the sidebar (or ?conversation= link).
   useEffect(() => {
-    const runParam = searchParams.get("run");
+    const conversationParam = searchParams.get("conversation");
     const taskParam = searchParams.get("task");
     if (taskParam && draftTask === null) setDraftTask(taskParam);
+    if (
+      !conversationParam ||
+      loadedConversationRef.current === conversationParam
+    )
+      return;
+    loadedConversationRef.current = conversationParam;
+    setLoadingHistory(true);
+    conversations
+      .get(conversationParam)
+      .then(({ conversation }) => {
+        setHistory(conversation.messages);
+        setConversationId(conversation.id);
+        reset();
+      })
+      .catch(() => undefined)
+      .finally(() => setLoadingHistory(false));
+  }, [searchParams, draftTask, reset]);
+
+  // Resume a live/finished run stream (?run= link).
+  useEffect(() => {
+    const runParam = searchParams.get("run");
     if (!runParam || resumedRunRef.current === runParam) return;
     resumedRunRef.current = runParam;
     runs
       .get(runParam)
       .then(({ run }) => {
-        setActiveRunPrompt(run.prompt);
+        setView((prev) => ({ ...prev, prompt: run.prompt }));
         runIdRef.current = runParam;
         reopen(runParam);
       })
       .catch(() => undefined);
-  }, [searchParams, draftTask, reopen, runIdRef]);
+  }, [searchParams, reopen, runIdRef, setView]);
 
   // Entrance animation for the intro header.
   useEffect(() => {
-    if (!headerRef.current || activeRunPrompt) return;
+    if (headerRef.current || activeRunPrompt || history.length > 0) return;
     const ctx = gsap.context(() => {
       gsap.from(".hero-line", {
         y: 26,
@@ -109,7 +133,7 @@ function AgentContent() {
       });
     }, headerRef);
     return () => ctx.revert();
-  }, [activeRunPrompt]);
+  }, [activeRunPrompt, history.length]);
 
   // Message stagger on new content.
   useEffect(() => {
@@ -129,12 +153,18 @@ function AgentContent() {
       );
     }, streamRef);
     return () => ctx.revert();
-  }, [view.tools.length, view.texts.length, view.summary]);
+  }, [view.tools.length, view.texts.length, view.summary, history.length]);
 
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [view.tools.length, view.texts.length, view.summary]);
+  }, [
+    view.tools.length,
+    view.texts.length,
+    view.summary,
+    history.length,
+    view.streamingText,
+  ]);
 
   useEffect(() => {
     if (streaming) {
@@ -146,29 +176,87 @@ function AgentContent() {
     }
   }, [streaming]);
 
+  // After the run finishes, store the agent reply in history locally and
+  // refresh the sidebar (the worker persisted the AGENT message).
+  useEffect(() => {
+    if (view.status === "SUCCEEDED" && view.summary) {
+      setHistory((prev) => {
+        const last = prev[prev.length - 1];
+        if (last?.role === "AGENT" && last.content === view.summary) return prev;
+        return [
+          ...prev,
+          {
+            id: `local-${prev.length}`,
+            role: "AGENT",
+            content: view.summary ?? "",
+            runId: runIdRef.current,
+            createdAt: new Date().toISOString(),
+          },
+        ];
+      });
+      announceRun();
+    }
+    if (view.status === "FAILED" || view.status === "CANCELLED") {
+      announceRun();
+    }
+  }, [view.status, view.summary, runIdRef]);
+
   const onSend = useCallback(
     (text: string, detail: PromptBarSendDetail) => {
       const mode = text.trim().startsWith("/fix") ? "FIX" : "CREATE";
       const cleaned = text.replace(/^\/\w+\s*/g, "").trim();
-      setActiveRunPrompt(cleaned);
       setDraftTask(null);
-      runIdRef.current = null;
-      void start(cleaned, mode === "FIX" ? "FIX" : "CREATE").then((id) => {
-        runIdRef.current = id;
-        if (id) {
-          announceRun();
-          router.replace("/agent", { scroll: false });
-        }
-      });
+      setHistory((prev) => [
+        ...prev,
+        {
+          id: `local-user-${prev.length}`,
+          role: "USER",
+          content: cleaned,
+          runId: null,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+      if (conversationId !== null) {
+        void sendToConversation(conversationId, cleaned, mode).then(
+          (created) => {
+            if (created) announceRun();
+          },
+        );
+      } else {
+        runIdRef.current = null;
+        void start(cleaned, mode).then((created) => {
+          runIdRef.current = created?.runId ?? null;
+          if (created) {
+            setConversationId(created.conversationId);
+            loadedConversationRef.current = created.conversationId;
+            announceRun();
+            router.replace(
+              `/agent?conversation=${created.conversationId}`,
+              { scroll: false },
+            );
+          }
+        });
+      }
       void detail;
     },
-    [start, runIdRef, router],
+    [start, sendToConversation, conversationId, runIdRef, router],
   );
 
   const onStop = useCallback(() => {
     cancel(runIdRef.current);
-    setActiveRunPrompt(null);
   }, [cancel, runIdRef]);
+
+  const onNewConversation = useCallback(() => {
+    reset();
+    setHistory([]);
+    setConversationId(null);
+    loadedConversationRef.current = null;
+    runIdRef.current = null;
+    router.replace("/agent", { scroll: false });
+  }, [reset, router, runIdRef]);
+
+  const showIntro =
+    !activeRunPrompt && history.length === 0 && !loadingHistory;
 
   return (
     <div className="relative flex h-[calc(100vh-3.4rem)] min-w-0 flex-col w-full">
@@ -182,7 +270,7 @@ function AgentContent() {
         ref={scrollRef}
         className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-8 md:px-8 w-full"
       >
-        {!activeRunPrompt && !view.summary ? (
+        {showIntro ? (
           <div
             ref={headerRef}
             className="mx-auto mt-24 flex max-w-2xl flex-col items-center text-center"
@@ -206,50 +294,45 @@ function AgentContent() {
           </div>
         ) : (
           <div className="mx-auto max-w-3xl space-y-5" ref={streamRef}>
-            {activeRunPrompt && (
-              <div className="stream-row flex justify-end">
-                <div className="max-w-[85%] rounded-2xl rounded-br-md bg-neutral-950 px-4 py-3 text-sm text-white shadow-sm">
-                  {activeRunPrompt}
-                </div>
+            {history.map((message) => (
+              <ChatBubble key={message.id} role={message.role} content={message.content} />
+            ))}
+
+            {view.workspace === "starting" && (
+              <div className="stream-row flex items-center gap-3 rounded-2xl border border-orange-200/70 bg-orange-50/40 px-4 py-3 text-sm text-orange-700">
+                <Loader2 className="size-4 animate-spin text-orange-500" />
+                Starting your workspace… (first run in this session can take a
+                moment)
+              </div>
+            )}
+            {view.workspace === "ready" && (
+              <div className="stream-row flex items-center gap-2 text-xs text-neutral-400">
+                <CheckCircle2 className="size-3.5 text-emerald-500" />
+                workspace ready
               </div>
             )}
 
-            {view.approach && (
-              <div className="stream-row rounded-2xl border border-neutral-200/70 bg-white p-4 shadow-sm">
-                <div className="mb-2 text-[11px] font-medium uppercase tracking-widest text-orange-500">
-                  approach
-                </div>
-                <p className="text-sm leading-relaxed text-neutral-700">
-                  {view.approach}
+            {view.reasonings.map((r, i) => (
+              <details key={`r-${i}`} className="stream-row rounded-xl border border-neutral-200/60 bg-neutral-50/60 px-4 py-2 text-xs text-neutral-500">
+                <summary className="cursor-pointer select-none font-medium">
+                  reasoning
+                </summary>
+                <p className="mt-2 whitespace-pre-wrap leading-relaxed">{r}</p>
+              </details>
+            ))}
+            {view.streamingReasoning && (
+              <div className="stream-row rounded-xl border border-neutral-200/60 bg-neutral-50/60 px-4 py-2 text-xs italic text-neutral-400">
+                <span className="not-italic font-medium">reasoning…</span>
+                <p className="mt-1 whitespace-pre-wrap leading-relaxed">
+                  {view.streamingReasoning.slice(-1200)}
                 </p>
-                <ul className="mt-3 space-y-1.5">
-                  {view.planGoals.map((g, i) => (
-                    <li
-                      key={i}
-                      className="flex items-start gap-2 text-sm text-neutral-600"
-                    >
-                      <ChevronsRight className="mt-0.5 size-3.5 shrink-0 text-orange-500" />
-                      <span>{g}</span>
-                    </li>
-                  ))}
-                </ul>
-                {view.replans.length > 0 && (
-                  <div className="mt-2 text-xs text-neutral-400">
-                    {view.replans.length > 0
-                      ? `${view.replans.length} replan(s)`
-                      : ""}
-                  </div>
-                )}
               </div>
             )}
 
             <ThoughtLine
               working={working}
-              steps={toolLines.map(
-                (t) =>
-                  `${t.name}${t.durationMs !== null ? ` (${(t.durationMs / 1000).toFixed(1)}s)` : ""}`,
-              )}
-              label={activeRunPrompt ? "Working..." : ""}
+              steps={toolLines.map((t) => t.name)}
+              label={working ? "Working..." : ""}
               doneLabel={
                 toolLines.length
                   ? `Ran ${toolLines.length} tool call${toolLines.length === 1 ? "" : "s"}`
@@ -267,7 +350,7 @@ function AgentContent() {
                 className="stream-row flex items-start gap-3 text-sm"
               >
                 <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg border border-neutral-200/70 bg-white text-neutral-400">
-                  {t.status === "pending" ? (
+                  {t.status === "running" ? (
                     <Loader2 className="size-3.5 animate-spin" />
                   ) : (
                     <Wrench className="size-3.5" />
@@ -278,15 +361,10 @@ function AgentContent() {
                     <span className="font-mono text-[13px] text-neutral-900">
                       {t.name}
                     </span>
-                    {t.durationMs !== null && (
-                      <span className="text-xs text-neutral-400">
-                        {(t.durationMs / 1000).toFixed(1)}s
-                      </span>
-                    )}
-                    {t.status === "ok" && (
+                    {t.status === "done" && (
                       <CheckCircle2 className="size-3.5 text-emerald-500" />
                     )}
-                    {t.status === "failed" && (
+                    {t.status === "error" && (
                       <CircleX className="size-3.5 text-red-500" />
                     )}
                   </div>
@@ -299,23 +377,62 @@ function AgentContent() {
               </div>
             ))}
 
-            {view.summary && (
+            {view.edits.map((e) => (
               <div
-                className={`stream-row rounded-2xl border p-5 shadow-sm ${
-                  view.status === "SUCCEEDED"
-                    ? "border-emerald-200/70 bg-emerald-50/40"
-                    : view.status === "FAILED"
-                      ? "border-red-200/70 bg-red-50/40"
-                      : "border-neutral-200/70 bg-orange-50/40"
-                }`}
+                key={e.path}
+                className="stream-row flex items-center gap-2 text-xs text-neutral-500"
               >
+                <PencilLine className="size-3.5 text-orange-400" />
+                <span className="font-mono">{e.path}</span>
+                {e.state === "done" && <CheckCircle2 className="size-3 text-emerald-500" />}
+                {e.state === "error" && <CircleX className="size-3 text-red-500" />}
+              </div>
+            ))}
+
+            {view.texts.map((text, i) => (
+              <div
+                key={`t-${i}`}
+                className="stream-row whitespace-pre-wrap rounded-2xl border border-neutral-200/70 bg-white px-4 py-3 text-sm leading-relaxed text-neutral-800 shadow-sm"
+              >
+                {text}
+              </div>
+            ))}
+            {view.streamingText && (
+              <div className="stream-row whitespace-pre-wrap rounded-2xl border border-neutral-200/70 bg-white px-4 py-3 text-sm leading-relaxed text-neutral-800 shadow-sm">
+                {view.streamingText}
+                <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-orange-400 align-middle" />
+              </div>
+            )}
+
+            {view.summary && view.status === "SUCCEEDED" && (
+              <div className="stream-row rounded-2xl border border-emerald-200/70 bg-emerald-50/40 p-5 shadow-sm">
                 <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-                  {view.status === "SUCCEEDED" ? (
-                    <>
-                      <CheckCircle2 className="size-4 text-emerald-600" />
-                      <span className="text-emerald-700">Run finished</span>
-                    </>
-                  ) : view.status === "FAILED" ? (
+                  <CheckCircle2 className="size-4 text-emerald-600" />
+                  <span className="text-emerald-700">Run finished</span>
+                </div>
+                {view.prUrl && (
+                  <a
+                    href={view.prUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-emerald-300/70 bg-white px-3 py-1 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-50"
+                  >
+                    <GitPullRequestArrow className="size-3.5" />
+                    View pull request
+                  </a>
+                )}
+                {(view.tokensIn !== null || view.tokensOut !== null) && (
+                  <p className="mt-1 text-xs text-neutral-400">
+                    {view.tokensIn ?? 0} in / {view.tokensOut ?? 0} out tokens
+                  </p>
+                )}
+              </div>
+            )}
+
+            {(view.status === "FAILED" || view.status === "CANCELLED") && (
+              <div className="stream-row rounded-2xl border border-red-200/70 bg-red-50/40 p-5 shadow-sm">
+                <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                  {view.status === "FAILED" ? (
                     <>
                       <CircleX className="size-4 text-red-600" />
                       <span className="text-red-700">Run failed</span>
@@ -327,17 +444,9 @@ function AgentContent() {
                     </>
                   )}
                 </div>
-                <p className="text-sm leading-relaxed text-neutral-700">
-                  {view.summary}
-                </p>
                 {view.error && (
-                  <p className="mt-2 font-mono text-xs text-neutral-400">
+                  <p className="font-mono text-xs text-neutral-500">
                     {view.error.code}: {view.error.message}
-                  </p>
-                )}
-                {view.durationMs !== null && (
-                  <p className="mt-3 text-xs text-neutral-400">
-                    {view.durationMs / 1000}s · agent run
                   </p>
                 )}
               </div>
@@ -381,12 +490,14 @@ function AgentContent() {
               </button>
             </div>
           )}
-          {!activeRunPrompt && !view.summary ? null : (
+          {history.length > 0 && (
             <div className="mb-2 flex items-center gap-2 text-xs text-neutral-400">
               <Terminal className="size-3.5" />
               {working
                 ? "agent is running — new tasks wait until this one finishes"
-                : "run complete — start another"}
+                : conversationId
+                  ? "continuing this conversation"
+                  : ""}
               {working && (
                 <button
                   type="button"
@@ -396,16 +507,13 @@ function AgentContent() {
                   stop run
                 </button>
               )}
-              {view.status !== "RUNNING" && !working && (
+              {!working && (
                 <button
                   type="button"
-                  onClick={() => {
-                    reset();
-                    setActiveRunPrompt(null);
-                  }}
+                  onClick={onNewConversation}
                   className="ml-auto rounded-full bg-neutral-100 px-2.5 py-0.5 font-medium text-neutral-600 transition-colors hover:bg-neutral-200"
                 >
-                  new task
+                  new chat
                 </button>
               )}
             </div>
@@ -419,10 +527,8 @@ function AgentContent() {
             }
             sources={SOURCES}
             commands={COMMANDS}
-            models={MODELS}
-            defaultModel="nemotron-super"
-            efforts={["quick", "standard", "deep"]}
-            defaultEffort="standard"
+            models={[]}
+            efforts={[]}
             busy={working}
             onSend={onSend}
             onStop={onStop}
@@ -435,6 +541,29 @@ function AgentContent() {
           />
         </div>
       </div>
+    </div>
+  );
+}
+
+function ChatBubble({
+  role,
+  content,
+}: {
+  role: string;
+  content: string;
+}) {
+  if (role === "USER") {
+    return (
+      <div className="stream-row flex justify-end">
+        <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-neutral-950 px-4 py-3 text-sm text-white shadow-sm">
+          {content}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="stream-row whitespace-pre-wrap rounded-2xl border border-neutral-200/70 bg-white px-4 py-3 text-sm leading-relaxed text-neutral-800 shadow-sm">
+      {content}
     </div>
   );
 }

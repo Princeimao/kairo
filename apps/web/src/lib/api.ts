@@ -12,41 +12,86 @@ export type PublicUser = {
   onboardingStep: OnboardingStep;
 };
 
+/** RunEvent — mirrors @kairo/run-queue (SSE `data:` payloads). */
 export type AgentEvent =
+  | { type: "workspace"; state: "starting" | "ready" }
+  | { type: "text"; text: string; done?: boolean }
+  | { type: "reasoning"; text: string; done?: boolean }
   | {
-      type: "plan";
-      plan: { approach: string; steps: { id: string; goal: string }[] };
-    }
-  | { type: "text"; text: string }
-  | { type: "tool_call"; id: string; name: string; args: unknown }
-  | {
-      type: "tool_result";
-      id: string;
+      type: "tool";
       name: string;
-      ok: boolean;
-      output: unknown;
-      durationMs: number;
+      state: "running" | "done" | "error";
+      input?: unknown;
+      output?: string;
+      callId?: string;
     }
-  | { type: "replan"; reason: string }
+  | { type: "edit"; path: string; state?: "running" | "done" | "error" }
   | { type: "error"; code: string; message: string }
   | {
       type: "done";
       status: "SUCCEEDED" | "FAILED" | "CANCELLED";
       summary: string;
-      steps: number;
-      durationMs: number;
+      tokensIn?: number;
+      tokensOut?: number;
+      prUrl?: string;
       error?: { code: string; message: string };
     };
 
-export type RunStatus = "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
+export type RunStatus = "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
 
 export type RunSummary = {
   id: string;
   status: RunStatus;
   mode: string;
   prompt: string;
+  conversationId: string | null;
+  repoFullName: string | null;
+  prUrl: string | null;
+  errorMessage: string | null;
+  tokensIn: number;
+  tokensOut: number;
   createdAt: string;
   finishedAt: string | null;
+};
+
+export type StartedRun = {
+  runId: string;
+  conversationId: string;
+  sessionId: string;
+};
+
+export type ConversationMessage = {
+  id: string;
+  role: string;
+  content: string;
+  runId: string | null;
+  createdAt: string;
+};
+
+export type ConversationView = {
+  id: string;
+  sessionId: string;
+  mode: string;
+  createdAt: string;
+  messages: ConversationMessage[];
+  runs: { id: string; status: string; createdAt: string; finishedAt: string | null }[];
+};
+
+export type ConversationSummary = {
+  id: string;
+  mode: string;
+  createdAt: string;
+  updatedAt: string;
+  preview: string | null;
+  lastRole: string | null;
+};
+
+export type SessionSummary = {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  conversations: ConversationSummary[];
 };
 
 export class ApiError extends Error {
@@ -123,8 +168,14 @@ export const auth = {
 };
 
 export const runs = {
-  create: (input: { prompt: string; mode?: "CREATE" | "FIX" }) =>
-    apiFetch<{ runId: string; status: RunStatus }>("/runs", {
+  create: (input: {
+    prompt: string;
+    mode?: "CREATE" | "FIX";
+    conversationId?: string;
+    sessionId?: string;
+    repoFullName?: string;
+  }) =>
+    apiFetch<StartedRun & { status: RunStatus }>("/runs", {
       method: "POST",
       body: JSON.stringify(input),
     }),
@@ -139,6 +190,45 @@ export const runs = {
 
   /** SSE endpoint (same-origin via the /api rewrite, cookies flow with it). */
   eventsUrl: (id: string) => `/api/runs/${id}/events`,
+};
+
+export const sessions = {
+  list: () =>
+    apiFetch<{ sessions: SessionSummary[] }>("/sessions").then(
+      (r) => r.sessions,
+    ),
+
+  get: (id: string) =>
+    apiFetch<{ session: SessionSummary }>(`/sessions/${id}`),
+
+  create: (title?: string) =>
+    apiFetch<{ session: SessionSummary }>("/sessions", {
+      method: "POST",
+      body: JSON.stringify(title ? { title } : {}),
+    }),
+
+  newConversation: (
+    id: string,
+    input: { prompt: string; mode?: "CREATE" | "FIX"; repoFullName?: string },
+  ) =>
+    apiFetch<StartedRun & { status: RunStatus }>(`/sessions/${id}/conversations`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+};
+
+export const conversations = {
+  get: (id: string) =>
+    apiFetch<{ conversation: ConversationView }>(`/conversations/${id}`),
+
+  message: (
+    id: string,
+    input: { prompt: string; mode?: "CREATE" | "FIX"; repoFullName?: string },
+  ) =>
+    apiFetch<StartedRun & { status: RunStatus }>(`/conversations/${id}/messages`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
 };
 
 export const github = {

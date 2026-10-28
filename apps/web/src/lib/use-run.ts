@@ -2,40 +2,48 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ApiError, runs, type AgentEvent, type RunStatus } from "@/lib/api";
+import { ApiError, conversations, runs, type AgentEvent, type RunStatus } from "@/lib/api";
 
 export type ToolStep = {
   id: string;
   name: string;
-  status: "pending" | "ok" | "failed";
-  durationMs: number | null;
+  status: "running" | "done" | "error";
+  input: unknown;
   output: string | null;
 };
 
 export type RunView = {
   status: RunStatus | "WAITING";
   prompt: string;
-  approach: string | null;
-  planGoals: string[];
-  replans: string[];
-  tools: ToolStep[];
+  workspace: "starting" | "ready" | null;
   texts: string[];
+  streamingText: string | null;
+  reasonings: string[];
+  streamingReasoning: string | null;
+  tools: ToolStep[];
+  edits: { path: string; state: "running" | "done" | "error" }[];
   summary: string | null;
+  prUrl: string | null;
+  tokensIn: number | null;
+  tokensOut: number | null;
   error: { code: string; message: string } | null;
-  durationMs: number | null;
 };
 
 const EMPTY: RunView = {
   status: "WAITING",
   prompt: "",
-  approach: null,
-  planGoals: [],
-  replans: [],
-  tools: [],
+  workspace: null,
   texts: [],
+  streamingText: null,
+  reasonings: [],
+  streamingReasoning: null,
+  tools: [],
+  edits: [],
   summary: null,
+  prUrl: null,
+  tokensIn: null,
+  tokensOut: null,
   error: null,
-  durationMs: null,
 };
 
 function outputToText(output: unknown): string | null {
@@ -48,11 +56,16 @@ function outputToText(output: unknown): string | null {
   }
 }
 
+function toolId(event: AgentEvent & { type: "tool" }, index: number): string {
+  return event.callId ?? `${event.name}:${index}`;
+}
+
 export function useRunStream() {
   const router = useRouter();
   const [view, setView] = useState<RunView>(EMPTY);
   const sourceRef = useRef<EventSource | null>(null);
   const runIdRef = useRef<string | null>(null);
+  const toolIndexRef = useRef(0);
 
   const close = useCallback(() => {
     sourceRef.current?.close();
@@ -62,55 +75,67 @@ export function useRunStream() {
   const reset = useCallback(() => {
     close();
     setView(EMPTY);
+    toolIndexRef.current = 0;
   }, [close]);
 
   const apply = useCallback(
     (event: AgentEvent) => {
       setView((prev) => {
         switch (event.type) {
-          case "plan":
+          case "workspace":
+            return { ...prev, status: "RUNNING", workspace: event.state };
+          case "text":
+            if (event.done) {
+              const text = event.text.trim();
+              return {
+                ...prev,
+                texts: text === "" ? prev.texts : [...prev.texts, text],
+                streamingText: null,
+              };
+            }
+            return { ...prev, status: "RUNNING", streamingText: event.text };
+          case "reasoning":
+            if (event.done) {
+              const text = event.text.trim();
+              return {
+                ...prev,
+                reasonings:
+                  text === "" ? prev.reasonings : [...prev.reasonings, text],
+                streamingReasoning: null,
+              };
+            }
             return {
               ...prev,
               status: "RUNNING",
-              approach: event.plan.approach,
-              planGoals: event.plan.steps.map((s) => s.goal),
-              replans: [],
+              streamingReasoning: event.text,
             };
-          case "replan":
-            return {
-              ...prev,
-              replans: [...prev.replans, event.reason],
-              planGoals: [],
-              approach: `replanning: ${event.reason}`,
-            }; // replaced when the fresh plan event lands
-          case "tool_call": {
-            const step: ToolStep = {
-              id: event.id,
-              name: event.name,
-              status: "pending",
-              durationMs: null,
-              output: null,
-            };
+          case "tool": {
+            const id = toolId(event, toolIndexRef.current);
+            toolIndexRef.current += 1;
             const tools = [...prev.tools];
-            const idx = tools.findIndex((t) => t.id === step.id);
+            const idx = tools.findIndex((t) => t.id === id);
+            const step: ToolStep = {
+              id,
+              name: event.name,
+              status: event.state,
+              input: event.input,
+              output: event.output ?? null,
+            };
             if (idx === -1) tools.push(step);
             else tools[idx] = step;
-            return { ...prev, tools };
+            return { ...prev, status: "RUNNING", tools };
           }
-          case "tool_result": {
-            const tools = [...prev.tools];
-            const idx = tools.findIndex((t) => t.id === event.id);
-            if (idx === -1) return prev;
-            tools[idx] = {
-              ...tools[idx],
-              status: event.ok ? "ok" : "failed",
-              durationMs: event.durationMs,
-              output: outputToText(event.output),
+          case "edit": {
+            const edits = [...prev.edits];
+            const idx = edits.findIndex((e) => e.path === event.path);
+            const edit = {
+              path: event.path,
+              state: event.state ?? "running",
             };
-            return { ...prev, tools };
+            if (idx === -1) edits.push(edit);
+            else edits[idx] = edit;
+            return { ...prev, status: "RUNNING", edits };
           }
-          case "text":
-            return { ...prev, texts: [...prev.texts, event.text] };
           case "error":
             return {
               ...prev,
@@ -121,15 +146,18 @@ export function useRunStream() {
               ...prev,
               status: event.status,
               summary: event.summary,
+              prUrl: event.prUrl ?? null,
+              tokensIn: event.tokensIn ?? prev.tokensIn,
+              tokensOut: event.tokensOut ?? prev.tokensOut,
+              streamingText: null,
+              streamingReasoning: null,
               error: event.error ?? prev.error,
-              durationMs: event.durationMs,
             };
           default:
             return prev;
         }
       });
-      const e = event as AgentEvent;
-      if (e.type === "done") close();
+      if (event.type === "done") close();
     },
     [close],
   );
@@ -162,6 +190,7 @@ export function useRunStream() {
     [apply],
   );
 
+  /** Start a brand-new conversation + run (POST /runs). */
   const start = useCallback(
     async (prompt: string, mode: "CREATE" | "FIX" = "CREATE") => {
       close();
@@ -170,7 +199,7 @@ export function useRunStream() {
         const created = await runs.create({ prompt, mode });
         runIdRef.current = created.runId;
         openStream(created.runId);
-        return created.runId;
+        return created;
       } catch (error) {
         if (error instanceof ApiError && error.status === 401) {
           router.replace("/login");
@@ -195,6 +224,46 @@ export function useRunStream() {
     [close, router, openStream],
   );
 
+  /** Continue an existing conversation (POST /conversations/:id/messages). */
+  const sendToConversation = useCallback(
+    async (
+      conversationId: string,
+      prompt: string,
+      mode: "CREATE" | "FIX" = "CREATE",
+    ) => {
+      close();
+      setView({ ...EMPTY, prompt });
+      try {
+        const created = await conversations.message(conversationId, {
+          prompt,
+          mode,
+        });
+        runIdRef.current = created.runId;
+        openStream(created.runId);
+        return created;
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          router.replace("/login");
+          return null;
+        }
+        setView((prev) => ({
+          ...prev,
+          status: "FAILED",
+          error: {
+            code: "CREATE_FAILED",
+            message:
+              error instanceof Error
+                ? error.message
+                : "Could not send the message",
+          },
+        }));
+        return null;
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [close, router, openStream],
+  );
+
   const cancel = useCallback(
     async (runId: string | null) => {
       if (!runId) {
@@ -210,7 +279,9 @@ export function useRunStream() {
 
   return {
     view,
+    setView,
     start,
+    sendToConversation,
     cancel,
     reset,
     close,

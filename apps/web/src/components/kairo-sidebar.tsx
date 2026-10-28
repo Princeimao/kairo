@@ -8,14 +8,11 @@ import type { LucideIcon } from "lucide-react";
 import {
   CircleCheck,
   CircleDot,
-  CircleX,
   GitBranch,
   MessagesSquare,
   LayoutDashboard,
   LogOut,
   RotateCw,
-  Send,
-  OctagonPause,
 } from "lucide-react";
 import { apiFetch, githubLoginUrl, type PublicUser } from "@/lib/api";
 import type { GithubEventItem } from "@/lib/api";
@@ -58,6 +55,14 @@ export function KairoSidebar({ user }: { user: PublicUser | null }) {
   const [loggingOut, setLoggingOut] = React.useState(false);
   const { sessions } = useSessions();
   const githubEvents = useGithubEvents();
+  const [currentConversation, setCurrentConversation] = React.useState<
+    string | null
+  >(null);
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setCurrentConversation(params.get("conversation"));
+  }, [pathname]);
 
   const logout = async () => {
     setLoggingOut(true);
@@ -169,46 +174,61 @@ export function KairoSidebar({ user }: { user: PublicUser | null }) {
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {sessions.slice(0, 6).map((run, i) => {
-                  const StateIcon =
-                    run.status === "RUNNING"
-                      ? CircleDot
-                      : run.status === "SUCCEEDED"
-                        ? CircleCheck
-                        : run.status === "FAILED"
-                          ? CircleX
-                          : OctagonPause;
-                  return (
-                    <motion.li
-                      key={run.id}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.04 * i, duration: 0.35 }}
-                    >
-                      <SidebarMenuButton
-                        isActive={false}
-                        tooltip={run.prompt}
-                        className="cursor-pointer text-xs text-neutral-500 hover:text-neutral-950 data-[active=true]:bg-orange-50 data-[active=true]:text-orange-600"
-                        render={
-                          <Link href={`/agent?run=${run.id}`}>
-                            <StateIcon
-                              className={
-                                run.status === "RUNNING"
-                                  ? "size-3.5 shrink-0 animate-pulse text-orange-500"
-                                  : run.status === "SUCCEEDED"
-                                    ? "size-3.5 shrink-0 text-emerald-500"
-                                    : run.status === "FAILED"
-                                      ? "size-3.5 shrink-0 text-red-500"
-                                      : "size-3.5 shrink-0 text-neutral-400"
-                              }
-                            />
-                            <span className="truncate">{sessionTitle(run.prompt)}</span>
-                          </Link>
-                        }
-                      />
-                    </motion.li>
-                  );
-                })}
+                {sessions.slice(0, 6).map((session, i) => (
+                  <motion.li
+                    key={session.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.04 * i, duration: 0.35 }}
+                  >
+                    <SidebarMenuButton
+                      isActive={false}
+                      tooltip={session.title}
+                      className="cursor-pointer text-xs font-medium text-neutral-700 hover:text-neutral-950"
+                      render={
+                        <span className="flex items-center gap-2">
+                          <MessagesSquare className="size-3.5 shrink-0 text-neutral-400" />
+                          <span className="truncate">{session.title}</span>
+                        </span>
+                      }
+                    />
+                    {session.conversations.length > 0 && (
+                      <SidebarMenu className="ml-4 mt-0.5 border-l border-neutral-200/70 pl-2">
+                        {session.conversations
+                          .slice(-4)
+                          .reverse()
+                          .map((conversation) => {
+                            const StateIcon =
+                              conversation.lastRole === "USER"
+                                ? CircleDot
+                                : CircleCheck;
+                            return (
+                              <SidebarMenuItem key={conversation.id}>
+                                <SidebarMenuButton
+                                  isActive={
+                                    pathname === "/agent" &&
+                                    currentConversation === conversation.id
+                                  }
+                                  tooltip={conversation.preview ?? "Conversation"}
+                                  className="cursor-pointer text-[11px] text-neutral-500 hover:text-neutral-950 data-[active=true]:bg-orange-50 data-[active=true]:text-orange-600"
+                                  render={
+                                    <Link
+                                      href={`/agent?conversation=${conversation.id}`}
+                                    >
+                                      <StateIcon className="size-3 shrink-0 text-neutral-300" />
+                                      <span className="truncate">
+                                        {conversation.preview ?? "Empty conversation"}
+                                      </span>
+                                    </Link>
+                                  }
+                                />
+                              </SidebarMenuItem>
+                            );
+                          })}
+                      </SidebarMenu>
+                    )}
+                  </motion.li>
+                ))}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -287,10 +307,6 @@ export function KairoSidebar({ user }: { user: PublicUser | null }) {
       </SidebarFooter>
     </Sidebar>
   );
-}
-
-function sessionTitle(prompt: string): string {
-  return prompt.length > 38 ? `${prompt.slice(0, 38)}…` : prompt;
 }
 
 function eventTitle(event: GithubEventItem): string {
