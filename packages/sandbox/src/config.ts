@@ -51,7 +51,9 @@ export function loadSandboxConfig(env: NodeJS.ProcessEnv = process.env): Sandbox
   return {
     image: env.KAIRO_SANDBOX_IMAGE?.trim() || "kairo-sandbox:latest",
     dockerHost,
-    networkMode: strEnv(env.KAIRO_SANDBOX_NETWORK, "bridge", ["bridge", "none"]),
+    // "user" (default): one isolated bridge network per user. "bridge"/"none"
+    // are explicit opt-outs for local debugging.
+    networkMode: strEnv(env.KAIRO_SANDBOX_NETWORK, "user", ["user", "bridge", "none"]),
     memoryBytes: intEnv(env.KAIRO_SANDBOX_MEMORY_MB, 1536) * MB,
     cpus: intEnv(env.KAIRO_SANDBOX_CPUS, 2),
     pidsLimit: intEnv(env.KAIRO_SANDBOX_PIDS_LIMIT, 256),

@@ -14,8 +14,15 @@ import {
   containerNameFor,
   loadSandboxConfig,
   SANDBOX_UID_GID,
+  sanitizeToken,
   volumeNameFor,
 } from "./config.js";
+import {
+  HARNESS_LABEL,
+  HARNESS_LABEL_VALUE,
+  llmTokenFor,
+  serverPasswordFor,
+} from "./credentials.js";
 
 const INSPECT_POLL_MS = 50;
 const EXIT_POLL_DEADLINE_MS = 5_000;
@@ -189,12 +196,17 @@ export class DockerWorkspace {
 
   /**
    * Brings the user's volume + container up: reuses a running container,
-   * restarts a stopped one, creates both resources on first use.
+   * restarts a stopped one, creates both resources on first use. A container
+   * that doesn't match the current harness spec (label, image, per-user
+   * network, derived credentials) is recreated so upgrades never leave a
+   * stale `sleep` container behind.
    */
   async ensureRunning(): Promise<RunningSandbox> {
     const { client, config } = await this.deps();
+    let imageId: string | undefined;
     try {
-      await client.imageInspect(config.image);
+      const image = await client.imageInspect(config.image);
+      imageId = image.Id;
     } catch (error) {
       if (isNotFound(error)) {
         throw new WorkspaceError(
@@ -205,7 +217,7 @@ export class DockerWorkspace {
       throw error;
     }
     await this.ensureVolume(client, config.image);
-    const reused = await this.ensureContainer(client, config);
+    const reused = await this.ensureContainer(client, config, imageId);
     return {
       volumeName: this.volumeName,
       containerName: this.containerName,
@@ -245,38 +257,110 @@ export class DockerWorkspace {
     await this.waitExited(client, init.Id ?? "");
   }
 
-  private async ensureContainer(client: DockerClientInstance, config: ClientDeps["config"]): Promise<boolean> {
+  /** One bridge network per user: containers of different users never share L2. */
+  private networkNameFor(config: ClientDeps["config"]): string {
+    if (config.networkMode === "none") return "none";
+    if (config.networkMode === "bridge") return "bridge";
+    return `kairo-net-${sanitizeToken(this.userId)}`;
+  }
+
+  private async ensureNetwork(client: DockerClientInstance, name: string): Promise<void> {
+    if (name === "none" || name === "bridge") return;
+    try {
+      await client.networkInspect(name);
+      return;
+    } catch (error) {
+      if (!isNotFound(error)) throw error;
+    }
+    await client.networkCreate({
+      Name: name,
+      Driver: "bridge",
+      Labels: { [HARNESS_LABEL]: "network" },
+    });
+  }
+
+  /** Container env owned by the harness (derived credentials, stable HOME). */
+  private harnessEnv(): string[] {
+    return [
+      "HOME=/home/node",
+      "NODE_ENV=production",
+      `OPENCODE_SERVER_PASSWORD=${serverPasswordFor(this.containerName)}`,
+      `KAIRO_LLM_TOKEN=${llmTokenFor(this.containerName)}`,
+    ];
+  }
+
+  /**
+   * An existing container is only reused when it matches the current spec:
+   * harness label, image id, network, and derived credentials. Anything else
+   * (old `sleep` containers, rotated SANDBOX_SECRET, rebuilt image, network
+   * mode change) falls through to a recreate.
+   */
+  private isCompatible(
+    state: ContainerInspectResponse,
+    wantedNetwork: string,
+    imageId?: string,
+  ): boolean {
+    const labels = state.Config?.Labels ?? {};
+    if (labels[HARNESS_LABEL] !== HARNESS_LABEL_VALUE) return false;
+    if ((state.HostConfig?.NetworkMode ?? "") !== wantedNetwork) return false;
+    if (imageId !== undefined && state.Image !== undefined && state.Image !== imageId) return false;
+    const env = new Map<string, string>();
+    for (const entry of state.Config?.Env ?? []) {
+      const at = entry.indexOf("=");
+      if (at > 0) env.set(entry.slice(0, at), entry.slice(at + 1));
+    }
+    if (env.get("OPENCODE_SERVER_PASSWORD") !== serverPasswordFor(this.containerName)) return false;
+    if (env.get("KAIRO_LLM_TOKEN") !== llmTokenFor(this.containerName)) return false;
+    return true;
+  }
+
+  private async ensureContainer(
+    client: DockerClientInstance,
+    config: ClientDeps["config"],
+    imageId?: string,
+  ): Promise<boolean> {
+    const wantedNetwork = this.networkNameFor(config);
+    await this.ensureNetwork(client, wantedNetwork);
+
     let state: ContainerInspectResponse | undefined;
     try {
       state = await client.containerInspect(this.containerName);
     } catch (error) {
       if (!isNotFound(error)) throw error;
     }
+
     if (state !== undefined) {
+      const compatible = this.isCompatible(state, wantedNetwork, imageId);
       const status = state.State?.Status ?? "";
-      if (status === "running") return true;
-      if (status === "paused") {
-        await client.containerUnpause(this.containerName);
-        return true;
-      }
-      if (status === "created" || status === "exited" || status === "dead") {
-        try {
-          await client.containerStart(this.containerName);
+      if (compatible) {
+        if (status === "running") return true;
+        if (status === "paused") {
+          await client.containerUnpause(this.containerName);
           return true;
-        } catch (error) {
-          if (!isNotFound(error)) {
-            await client.containerDelete(this.containerName, { force: true }).catch(() => undefined);
+        }
+        if (status === "created" || status === "exited" || status === "dead") {
+          try {
+            await client.containerStart(this.containerName);
+            return true;
+          } catch (error) {
+            if (!isNotFound(error)) {
+              await client.containerDelete(this.containerName, { force: true }).catch(() => undefined);
+            }
           }
         }
+      } else {
+        await client.containerDelete(this.containerName, { force: true }).catch(() => undefined);
       }
     }
+
     await client.containerCreate(
       {
         Image: config.image,
-        Cmd: ["sleep", "infinity"],
+        Cmd: ["opencode", "serve", "--hostname", "0.0.0.0", "--port", "4096"],
         User: SANDBOX_UID_GID,
         WorkingDir: WORKSPACE_ROOT,
-        Env: ["HOME=/home/node", "NODE_ENV=production"],
+        Env: this.harnessEnv(),
+        Labels: { [HARNESS_LABEL]: HARNESS_LABEL_VALUE },
         AttachStdin: false,
         AttachStdout: false,
         AttachStderr: false,
@@ -292,7 +376,10 @@ export class DockerWorkspace {
           Tmpfs: { "/tmp": "size=512m", "/home/node": "size=256m" },
           CapDrop: ["ALL"],
           SecurityOpt: ["no-new-privileges"],
-          NetworkMode: config.networkMode,
+          NetworkMode: wantedNetwork,
+          // Lets the container reach the host-side LLM proxy + GitHub API.
+          ExtraHosts:
+            wantedNetwork === "none" ? undefined : ["host.docker.internal:host-gateway"],
         },
       },
       { name: this.containerName },

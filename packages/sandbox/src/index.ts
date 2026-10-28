@@ -9,6 +9,13 @@ export {
 } from "./sandbox.js";
 export { WorkspaceError } from "./errors.js";
 export {
+  HARNESS_LABEL,
+  HARNESS_LABEL_VALUE,
+  serverPasswordFor,
+  llmTokenFor,
+  llmTokenHash,
+} from "./credentials.js";
+export {
   loadSandboxConfig,
   containerNameFor,
   volumeNameFor,
