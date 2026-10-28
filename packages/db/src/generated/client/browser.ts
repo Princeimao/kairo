@@ -33,6 +33,11 @@ export type GithubConnection = Prisma.GithubConnectionModel
  */
 export type Session = Prisma.SessionModel
 /**
+ * Model GithubEvent
+ * 
+ */
+export type GithubEvent = Prisma.GithubEventModel
+/**
  * Model Sandbox
  * 
  */

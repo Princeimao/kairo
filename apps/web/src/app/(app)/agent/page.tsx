@@ -1,6 +1,7 @@
 ﻿"use client";
 
-import * as React from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense } from "react";
 import { gsap } from "gsap";
 import {
   CheckCircle2,
@@ -14,8 +15,10 @@ import {
 } from "lucide-react";
 import PromptBar, { type PromptBarSendDetail } from "@/components/PromptBar";
 import ThoughtLine from "@/components/ThoughtLine";
+import { announceRun } from "@/lib/use-sessions";
 import { useRunStream } from "@/lib/use-run";
 import { runs } from "@/lib/api";
+import { useSearchParams, useRouter } from "next/navigation";
 
 const MODELS = [
   { key: "nemotron-nano", name: "Nemotron 3 Nano", tag: "planner" },
@@ -45,36 +48,49 @@ const SOURCES = [
 ];
 
 export default function AgentPage() {
-  const { view, start, cancel, reset, reopen, runIdRef } = useRunStream();
-  const scrollRef = React.useRef<HTMLDivElement>(null);
-  const streamRef = React.useRef<HTMLDivElement>(null);
-  const headerRef = React.useRef<HTMLDivElement>(null);
-  const [activeRunPrompt, setActiveRunPrompt] = React.useState<string | null>(
-    null,
+  return (
+    <Suspense fallback={null}>
+      <AgentContent />
+    </Suspense>
   );
-  const resumedRef = React.useRef(false);
+}
+
+function AgentContent() {
+  const { view, start, cancel, reset, reopen, runIdRef } = useRunStream();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const streamRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const [activeRunPrompt, setActiveRunPrompt] = useState<string | null>(null);
+  const [draftTask, setDraftTask] = useState<string | null>(null);
+  const resumedRunRef = useRef<string | null>(null);
 
   const streaming = activeRunPrompt !== null && view.status === "RUNNING";
 
-  // Resume an in-flight run after a page reload.
-  React.useEffect(() => {
-    if (resumedRef.current) return;
-    resumedRef.current = true;
+  const working =
+    activeRunPrompt !== null &&
+    (view.status === "RUNNING" || (view.status === "WAITING" && !view.error));
+  const toolLines = view.tools;
+
+  useEffect(() => {
+    const runParam = searchParams.get("run");
+    const taskParam = searchParams.get("task");
+    if (taskParam && draftTask === null) setDraftTask(taskParam);
+    if (!runParam || resumedRunRef.current === runParam) return;
+    resumedRunRef.current = runParam;
     runs
-      .list()
-      .then((all) => {
-        const open = all.find((r) => r.status === "RUNNING");
-        if (open) {
-          runIdRef.current = open.id;
-          setActiveRunPrompt(open.prompt);
-          reopen(open.id);
-        }
+      .get(runParam)
+      .then(({ run }) => {
+        setActiveRunPrompt(run.prompt);
+        runIdRef.current = runParam;
+        reopen(runParam);
       })
       .catch(() => undefined);
-  }, [reopen, runIdRef]);
+  }, [searchParams, draftTask, reopen, runIdRef]);
 
   // Entrance animation for the intro header.
-  React.useEffect(() => {
+  useEffect(() => {
     if (!headerRef.current || activeRunPrompt) return;
     const ctx = gsap.context(() => {
       gsap.from(".hero-line", {
@@ -96,7 +112,7 @@ export default function AgentPage() {
   }, [activeRunPrompt]);
 
   // Message stagger on new content.
-  React.useEffect(() => {
+  useEffect(() => {
     if (!streamRef.current) return;
     const ctx = gsap.context(() => {
       gsap.fromTo(
@@ -115,12 +131,12 @@ export default function AgentPage() {
     return () => ctx.revert();
   }, [view.tools.length, view.texts.length, view.summary]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [view.tools.length, view.texts.length, view.summary]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (streaming) {
       const id = window.setInterval(() => {
         const el = scrollRef.current;
@@ -130,31 +146,32 @@ export default function AgentPage() {
     }
   }, [streaming]);
 
-  const onSend = React.useCallback(
+  const onSend = useCallback(
     (text: string, detail: PromptBarSendDetail) => {
       const mode = text.trim().startsWith("/fix") ? "FIX" : "CREATE";
       const cleaned = text.replace(/^\/\w+\s*/g, "").trim();
       setActiveRunPrompt(cleaned);
+      setDraftTask(null);
       runIdRef.current = null;
       void start(cleaned, mode === "FIX" ? "FIX" : "CREATE").then((id) => {
         runIdRef.current = id;
+        if (id) {
+          announceRun();
+          router.replace("/agent", { scroll: false });
+        }
       });
       void detail;
     },
-    [start, runIdRef],
+    [start, runIdRef, router],
   );
 
-  const onStop = React.useCallback(() => {
+  const onStop = useCallback(() => {
     cancel(runIdRef.current);
     setActiveRunPrompt(null);
-  }, [cancel]);
-
-  const working =
-    view.status === "RUNNING" || (view.status === "WAITING" && !view.error);
-  const toolLines = view.tools;
+  }, [cancel, runIdRef]);
 
   return (
-    <div className="relative flex h-[calc(100vh-3.4rem)] min-w-0 flex-col">
+    <div className="relative flex h-[calc(100vh-3.4rem)] min-w-0 flex-col w-full">
       {/* subtle grid backdrop */}
       <div
         aria-hidden
@@ -163,7 +180,7 @@ export default function AgentPage() {
 
       <div
         ref={scrollRef}
-        className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-8 md:px-8"
+        className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-8 md:px-8 w-full"
       >
         {!activeRunPrompt && !view.summary ? (
           <div
@@ -232,7 +249,7 @@ export default function AgentPage() {
                 (t) =>
                   `${t.name}${t.durationMs !== null ? ` (${(t.durationMs / 1000).toFixed(1)}s)` : ""}`,
               )}
-              label={activeRunPrompt ? "Workingâ€¦" : ""}
+              label={activeRunPrompt ? "Working..." : ""}
               doneLabel={
                 toolLines.length
                   ? `Ran ${toolLines.length} tool call${toolLines.length === 1 ? "" : "s"}`
@@ -320,7 +337,7 @@ export default function AgentPage() {
                 )}
                 {view.durationMs !== null && (
                   <p className="mt-3 text-xs text-neutral-400">
-                    {view.durationMs / 1000}s Â· agent run
+                    {view.durationMs / 1000}s · agent run
                   </p>
                 )}
               </div>
@@ -329,14 +346,47 @@ export default function AgentPage() {
         )}
       </div>
 
-      <div className="shrink-0 px-4 pb-5 pt-2 md:px-8">
-        <div className="mx-auto max-w-3xl">
+      <div className="shrink-0 px-4 pb-5 pt-2 md:px-8 w-full">
+        <div className="mx-auto max-w-3xl w-full">
+          {draftTask && !streaming && (
+            <div className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-orange-200/70 bg-orange-50/60 px-3.5 py-2 text-xs text-orange-700">
+              <span className="font-medium">draft task</span>
+              <span
+                className="line-clamp-2 flex-1 font-mono"
+                style={{
+                  WebkitLineClamp: 2,
+                  display: "-webkit-box",
+                  WebkitBoxOrient: "vertical",
+                  overflow: "hidden",
+                }}
+              >
+                {draftTask}
+              </span>
+              <button
+                type="button"
+                onClick={() => onSend(draftTask, { attachments: [] })}
+                className="cursor-pointer rounded-full bg-orange-500 px-2.5 py-0.5 font-medium text-white transition-colors hover:bg-orange-400"
+              >
+                run this
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDraftTask(null);
+                  router.replace("/agent", { scroll: false });
+                }}
+                className="cursor-pointer rounded-full bg-white px-2.5 py-0.5 font-medium text-neutral-500 transition-colors hover:text-neutral-700"
+              >
+                dismiss
+              </button>
+            </div>
+          )}
           {!activeRunPrompt && !view.summary ? null : (
             <div className="mb-2 flex items-center gap-2 text-xs text-neutral-400">
               <Terminal className="size-3.5" />
               {working
-                ? "agent is running â€” new tasks wait until this one finishes"
-                : "run complete â€” start another"}
+                ? "agent is running — new tasks wait until this one finishes"
+                : "run complete — start another"}
               {working && (
                 <button
                   type="button"

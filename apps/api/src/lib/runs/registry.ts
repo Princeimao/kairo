@@ -1,11 +1,5 @@
 import type { AgentEvent } from "@kairo/agent";
 
-/**
- * In-memory run broker, Stage 6-lite edition (no BullMQ queue):
- * the agent loop runs inside the API process, events are fanned out to SSE
- * subscribers and persisted to AgentStep rows so late subscribers can
- * replay from any cursor.
- */
 export interface StoredEvent {
   seq: number;
   event: AgentEvent;
@@ -16,9 +10,7 @@ export interface RunChannel {
   userId: string;
   events: StoredEvent[];
   controller: AbortController;
-  /** Run has emitted a terminal event; subscribers stop streaming after it. */
   closed: boolean;
-  /** Résolved by pushEvent to wake the SSE drain loops. */
   waiters: Array<() => void>;
 }
 
@@ -44,12 +36,10 @@ const MAX_STEP_PAYLOAD_BYTES = 100_000;export class RunRegistry {
     return this.channels.get(runId);
   }
 
-  /** Active run for a user, if any (one agent loop at a time per user). */
   activeRunIdFor(userId: string): string | undefined {
     return this.activeByUser.get(userId);
   }
 
-  /** Fans out to waiters; returns the stored event, or null once closed. */
   push(runId: string, event: AgentEvent): StoredEvent | null {
     const channel = this.channels.get(runId);
     if (!channel || channel.closed) return null;

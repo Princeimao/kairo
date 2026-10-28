@@ -1,4 +1,5 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+
+const API_PREFIX = "/api";
 
 export type OnboardingStep = "WELCOME" | "PROFILE" | "PERMISSIONS" | "DONE";
 
@@ -12,7 +13,10 @@ export type PublicUser = {
 };
 
 export type AgentEvent =
-  | { type: "plan"; plan: { approach: string; steps: { id: string; goal: string }[] } }
+  | {
+      type: "plan";
+      plan: { approach: string; steps: { id: string; goal: string }[] };
+    }
   | { type: "text"; text: string }
   | { type: "tool_call"; id: string; name: string; args: unknown }
   | {
@@ -68,7 +72,7 @@ export async function apiFetch<T>(
 
   let response: Response;
   try {
-    response = await fetch(`${API_URL}${path}`, {
+    response = await fetch(`${API_PREFIX}${path}`, {
       ...init,
       credentials: "include",
       headers: {
@@ -127,7 +131,8 @@ export const runs = {
 
   list: () => apiFetch<{ runs: RunSummary[] }>("/runs").then((r) => r.runs),
 
-  get: (id: string) => apiFetch<{ run: RunSummary; steps: number }>(`/runs/${id}`),
+  get: (id: string) =>
+    apiFetch<{ run: RunSummary; steps: number }>(`/runs/${id}`),
 
   cancel: (id: string) =>
     apiFetch<{ ok: boolean }>(`/runs/${id}/cancel`, { method: "POST" }),
@@ -136,7 +141,24 @@ export const runs = {
   eventsUrl: (id: string) => `/api/runs/${id}/events`,
 };
 
-export const apiUrl = API_URL;
+export const github = {
+  /** Recent GitHub activity (issues, PRs, review comments) from webhooks. */
+  events: () =>
+    apiFetch<{ events: GithubEventItem[] }>("/github/events").then(
+      (r) => r.events,
+    ),
+};
 
-/** Full-page navigation target that starts the GitHub OAuth flow. */
-export const githubLoginUrl = `${API_URL}/auth/github`;
+export type GithubEventItem = {
+  id: string;
+  eventType: string;
+  action: string | null;
+  repo: string | null;
+  number: number | null;
+  title: string | null;
+  url: string | null;
+  createdAt: string;
+};
+
+/** Full-page navigation through the proxy, so the session cookie lands on this origin. */
+export const githubLoginUrl = "/api/auth/github";

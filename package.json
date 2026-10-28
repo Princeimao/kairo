@@ -10,6 +10,7 @@
     "sandbox:build": "docker build -t kairo-sandbox:latest -f sandbox/Dockerfile sandbox"
   },
   "devDependencies": {
+    "@types/morgan": "^1.9.10",
     "prettier": "3.9.6",
     "turbo": "^2.11.10",
     "typescript": "^5.9.3"
@@ -24,6 +25,7 @@
   ],
   "dependencies": {
     "@gsap/react": "^2.1.2",
-    "dotenv": "^18.0.9"
+    "dotenv": "^18.0.9",
+    "morgan": "^1.12.1"
   }
 }

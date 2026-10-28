@@ -41,6 +41,7 @@ model User {
   githubConnection GithubConnection?
   sessions         Session[]
   sandbox          Sandbox?
+  githubEvents     GithubEvent[]
 
   @@map("users")
 }
@@ -72,6 +73,27 @@ model Session {
   @@index([userId])
   @@index([tokenHash])
   @@map("sessions")
+}
+
+model GithubEvent {
+  id             String   @id @default(cuid())
+  userId         String?
+  deliveryId     String   @unique
+  eventType      String
+  action         String?
+  installationId String?
+  repoOwner      String?
+  repoName       String?
+  number         Int?
+  title          String?
+  url            String?
+  payload        Json
+  createdAt      DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@map("github_events")
 }
 
 model Sandbox {

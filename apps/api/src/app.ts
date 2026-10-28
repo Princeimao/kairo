@@ -2,6 +2,7 @@ import express from "express";
 import helmet from "helmet";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import morgan from "morgan";
 import { prisma } from "@kairo/db";
 import { env } from "./config/env.js";
 import { errorHandler } from "./middleware/error-handler.js";
@@ -10,10 +11,10 @@ import { authRateLimiter } from "./middleware/rate-limit.js";
 import { authRouter } from "./routes/auth.js";
 import { runRouter } from "./routes/runs.js";
 import { sandboxRouter } from "./routes/sandbox.js";
+import { githubRouter, githubWebhookRouter } from "./routes/github.js";
 
 export const app = express();
 
-// ── Security & parsing ──────────────────────────────────────────────
 app.use(helmet());
 app.use(
   cors({
@@ -22,6 +23,13 @@ app.use(
   }),
 );
 app.use(cookieParser());
+app.use(morgan("dev"));
+
+app.use(
+  "/github/webhook",
+  express.raw({ type: "*/*", limit: "10mb" }),
+  githubWebhookRouter,
+);
 app.use(express.json());
 
 // ── Routes ──────────────────────────────────────────────────────────
@@ -32,6 +40,7 @@ app.get("/health", (_req, res) => {
 app.use("/auth", authRateLimiter, authRouter);
 app.use("/runs", runRouter);
 app.use("/sandbox", sandboxRouter);
+app.use("/github", githubRouter);
 
 app.get("/protected", requireAuth, async (req, res, next) => {
   try {

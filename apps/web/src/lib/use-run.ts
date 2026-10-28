@@ -48,11 +48,6 @@ function outputToText(output: unknown): string | null {
   }
 }
 
-/**
- * Drives a single agent run: opens the SSE stream, folds incoming events into
- * a render-ready view, and closes itself when the run reaches a terminal
- * status. EventSource reconnects automatically and resends Last-Event-ID.
- */
 export function useRunStream() {
   const router = useRouter();
   const [view, setView] = useState<RunView>(EMPTY);
@@ -69,76 +64,81 @@ export function useRunStream() {
     setView(EMPTY);
   }, [close]);
 
-  const apply = useCallback((event: AgentEvent) => {
-    setView((prev) => {
-      switch (event.type) {
-        case "plan":
-          return {
-            ...prev,
-            status: "RUNNING",
-            approach: event.plan.approach,
-            planGoals: event.plan.steps.map((s) => s.goal),
-            replans: [],
-          };
-        case "replan":
-          return {
-            ...prev,
-            replans: [...prev.replans, event.reason],
-            planGoals: [],
-            approach: `replanning: ${event.reason}`,
-          }; // replaced when the fresh plan event lands
-        case "tool_call": {
-          const step: ToolStep = {
-            id: event.id,
-            name: event.name,
-            status: "pending",
-            durationMs: null,
-            output: null,
-          };
-          const tools = [...prev.tools];
-          const idx = tools.findIndex((t) => t.id === step.id);
-          if (idx === -1) tools.push(step);
-          else tools[idx] = step;
-          return { ...prev, tools };
+  const apply = useCallback(
+    (event: AgentEvent) => {
+      setView((prev) => {
+        switch (event.type) {
+          case "plan":
+            return {
+              ...prev,
+              status: "RUNNING",
+              approach: event.plan.approach,
+              planGoals: event.plan.steps.map((s) => s.goal),
+              replans: [],
+            };
+          case "replan":
+            return {
+              ...prev,
+              replans: [...prev.replans, event.reason],
+              planGoals: [],
+              approach: `replanning: ${event.reason}`,
+            }; // replaced when the fresh plan event lands
+          case "tool_call": {
+            const step: ToolStep = {
+              id: event.id,
+              name: event.name,
+              status: "pending",
+              durationMs: null,
+              output: null,
+            };
+            const tools = [...prev.tools];
+            const idx = tools.findIndex((t) => t.id === step.id);
+            if (idx === -1) tools.push(step);
+            else tools[idx] = step;
+            return { ...prev, tools };
+          }
+          case "tool_result": {
+            const tools = [...prev.tools];
+            const idx = tools.findIndex((t) => t.id === event.id);
+            if (idx === -1) return prev;
+            tools[idx] = {
+              ...tools[idx],
+              status: event.ok ? "ok" : "failed",
+              durationMs: event.durationMs,
+              output: outputToText(event.output),
+            };
+            return { ...prev, tools };
+          }
+          case "text":
+            return { ...prev, texts: [...prev.texts, event.text] };
+          case "error":
+            return {
+              ...prev,
+              error: { code: event.code, message: event.message },
+            };
+          case "done":
+            return {
+              ...prev,
+              status: event.status,
+              summary: event.summary,
+              error: event.error ?? prev.error,
+              durationMs: event.durationMs,
+            };
+          default:
+            return prev;
         }
-        case "tool_result": {
-          const tools = [...prev.tools];
-          const idx = tools.findIndex((t) => t.id === event.id);
-          if (idx === -1) return prev;
-          tools[idx] = {
-            ...tools[idx],
-            status: event.ok ? "ok" : "failed",
-            durationMs: event.durationMs,
-            output: outputToText(event.output),
-          };
-          return { ...prev, tools };
-        }
-        case "text":
-          return { ...prev, texts: [...prev.texts, event.text] };
-        case "error":
-          return {
-            ...prev,
-            error: { code: event.code, message: event.message },
-          };
-        case "done":
-          return {
-            ...prev,
-            status: event.status,
-            summary: event.summary,
-            error: event.error ?? prev.error,
-            durationMs: event.durationMs,
-          };
-        default:
-          return prev;
-      }
-    });
-    const e = event as AgentEvent;
-    if (e.type === "done") close();
-  }, [close]);
+      });
+      const e = event as AgentEvent;
+      if (e.type === "done") close();
+    },
+    [close],
+  );
 
   const openStream = useCallback(
     (runId: string) => {
-      const source = new EventSource(runs.eventsUrl(runId), { withCredentials: true });
+      const source = new EventSource(runs.eventsUrl(runId), {
+        withCredentials: true,
+      });
       sourceRef.current = source;
       source.onmessage = (msg) => {
         try {
@@ -151,7 +151,10 @@ export function useRunStream() {
         const failed = new ApiError(0, "Lost connection to the Kairo API");
         setView((prev) =>
           prev.status === "RUNNING" || prev.status === "WAITING"
-            ? { ...prev, error: { code: "STREAM_LOST", message: failed.message } }
+            ? {
+                ...prev,
+                error: { code: "STREAM_LOST", message: failed.message },
+              }
             : prev,
         );
       };
@@ -179,7 +182,10 @@ export function useRunStream() {
           status: "FAILED",
           error: {
             code: "CREATE_FAILED",
-            message: error instanceof Error ? error.message : "Could not start the run",
+            message:
+              error instanceof Error
+                ? error.message
+                : "Could not start the run",
           },
         });
         return null;
@@ -189,15 +195,26 @@ export function useRunStream() {
     [close, router, openStream],
   );
 
-  const cancel = useCallback(async (runId: string | null) => {
-    if (!runId) {
-      close();
-      return;
-    }
-    await runs.cancel(runId).catch(() => undefined);
-  }, [close]);
+  const cancel = useCallback(
+    async (runId: string | null) => {
+      if (!runId) {
+        close();
+        return;
+      }
+      await runs.cancel(runId).catch(() => undefined);
+    },
+    [close],
+  );
 
   useEffect(() => close, [close]);
 
-  return { view, start, cancel, reset, close, reopen: openStream, runIdRef } as const;
+  return {
+    view,
+    start,
+    cancel,
+    reset,
+    close,
+    reopen: openStream,
+    runIdRef,
+  } as const;
 }

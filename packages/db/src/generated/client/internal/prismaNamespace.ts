@@ -400,6 +400,7 @@ export const ModelName = {
   User: 'User',
   GithubConnection: 'GithubConnection',
   Session: 'Session',
+  GithubEvent: 'GithubEvent',
   Sandbox: 'Sandbox',
   AgentRun: 'AgentRun',
   AgentStep: 'AgentStep'
@@ -418,7 +419,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "user" | "githubConnection" | "session" | "sandbox" | "agentRun" | "agentStep"
+    modelProps: "user" | "githubConnection" | "session" | "githubEvent" | "sandbox" | "agentRun" | "agentStep"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -641,6 +642,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.SessionCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.SessionCountAggregateOutputType> | number
+        }
+      }
+    }
+    GithubEvent: {
+      payload: Prisma.$GithubEventPayload<ExtArgs>
+      fields: Prisma.GithubEventFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.GithubEventFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubEventPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.GithubEventFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubEventPayload>
+        }
+        findFirst: {
+          args: Prisma.GithubEventFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubEventPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.GithubEventFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubEventPayload>
+        }
+        findMany: {
+          args: Prisma.GithubEventFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubEventPayload>[]
+        }
+        create: {
+          args: Prisma.GithubEventCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubEventPayload>
+        }
+        createMany: {
+          args: Prisma.GithubEventCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.GithubEventCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubEventPayload>[]
+        }
+        delete: {
+          args: Prisma.GithubEventDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubEventPayload>
+        }
+        update: {
+          args: Prisma.GithubEventUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubEventPayload>
+        }
+        deleteMany: {
+          args: Prisma.GithubEventDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.GithubEventUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.GithubEventUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubEventPayload>[]
+        }
+        upsert: {
+          args: Prisma.GithubEventUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubEventPayload>
+        }
+        aggregate: {
+          args: Prisma.GithubEventAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateGithubEvent>
+        }
+        groupBy: {
+          args: Prisma.GithubEventGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.GithubEventGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.GithubEventCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.GithubEventCountAggregateOutputType> | number
         }
       }
     }
@@ -945,6 +1020,25 @@ export const SessionScalarFieldEnum = {
 export type SessionScalarFieldEnum = (typeof SessionScalarFieldEnum)[keyof typeof SessionScalarFieldEnum]
 
 
+export const GithubEventScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  deliveryId: 'deliveryId',
+  eventType: 'eventType',
+  action: 'action',
+  installationId: 'installationId',
+  repoOwner: 'repoOwner',
+  repoName: 'repoName',
+  number: 'number',
+  title: 'title',
+  url: 'url',
+  payload: 'payload',
+  createdAt: 'createdAt'
+} as const
+
+export type GithubEventScalarFieldEnum = (typeof GithubEventScalarFieldEnum)[keyof typeof GithubEventScalarFieldEnum]
+
+
 export const SandboxScalarFieldEnum = {
   id: 'id',
   userId: 'userId',
@@ -1076,34 +1170,6 @@ export type ListDateTimeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaM
 
 
 /**
- * Reference to a field of type 'AgentRunMode'
- */
-export type EnumAgentRunModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AgentRunMode'>
-    
-
-
-/**
- * Reference to a field of type 'AgentRunMode[]'
- */
-export type ListEnumAgentRunModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AgentRunMode[]'>
-    
-
-
-/**
- * Reference to a field of type 'AgentRunStatus'
- */
-export type EnumAgentRunStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AgentRunStatus'>
-    
-
-
-/**
- * Reference to a field of type 'AgentRunStatus[]'
- */
-export type ListEnumAgentRunStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AgentRunStatus[]'>
-    
-
-
-/**
  * Reference to a field of type 'Int'
  */
 export type IntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Int'>
@@ -1128,6 +1194,34 @@ export type JsonFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'J
  * Reference to a field of type 'QueryMode'
  */
 export type EnumQueryModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'QueryMode'>
+    
+
+
+/**
+ * Reference to a field of type 'AgentRunMode'
+ */
+export type EnumAgentRunModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AgentRunMode'>
+    
+
+
+/**
+ * Reference to a field of type 'AgentRunMode[]'
+ */
+export type ListEnumAgentRunModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AgentRunMode[]'>
+    
+
+
+/**
+ * Reference to a field of type 'AgentRunStatus'
+ */
+export type EnumAgentRunStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AgentRunStatus'>
+    
+
+
+/**
+ * Reference to a field of type 'AgentRunStatus[]'
+ */
+export type ListEnumAgentRunStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AgentRunStatus[]'>
     
 
 
@@ -1298,6 +1392,7 @@ export type GlobalOmitConfig = {
   user?: Prisma.UserOmit
   githubConnection?: Prisma.GithubConnectionOmit
   session?: Prisma.SessionOmit
+  githubEvent?: Prisma.GithubEventOmit
   sandbox?: Prisma.SandboxOmit
   agentRun?: Prisma.AgentRunOmit
   agentStep?: Prisma.AgentStepOmit

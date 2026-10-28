@@ -44,7 +44,6 @@ export async function executeRun(
   prompt: string,
   workspace: Workspace,
 ): Promise<void> {
-  // Serialize DB writes so AgentStep rows keep registry order.
   let writes: Promise<void> = Promise.resolve();
   const persist = (event: AgentEvent): void => {
     writes = writes.then(async () => {

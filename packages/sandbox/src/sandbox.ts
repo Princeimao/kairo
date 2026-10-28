@@ -137,13 +137,6 @@ export interface SandboxStatus {
   image: string;
 }
 
-/**
- * The agent's computer, inside a per-user Docker container.
- *
- * - volume `kairo-ws-<userId>` mounted at /workspace: the agent's files
- * - image built by `npm run sandbox:build` (node+git+rg+python+toolchain)
- * - non-root user 1000, caps dropped, read-only rootfs, memory/pids capped
- */
 export class DockerWorkspace implements Workspace {
   readonly rootLabel = "sandbox";
   readonly userId: string;

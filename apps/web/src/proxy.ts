@@ -56,7 +56,9 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   }
 
   const isProtected =
-    pathname.startsWith("/dashboard") || pathname.startsWith("/onboarding");
+    pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/onboarding") ||
+    pathname.startsWith("/agent");
   if (!isProtected) return NextResponse.next();
 
   if (!hasSessionCookie) {
@@ -91,5 +93,5 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/onboarding/:path*", "/login"],
+  matcher: ["/dashboard/:path*", "/onboarding/:path*", "/agent/:path*", "/login"],
 };

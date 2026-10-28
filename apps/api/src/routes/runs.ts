@@ -56,7 +56,9 @@ function serializeRun(row: {
 }
 
 function isTerminalStatus(status: string): boolean {
-  return status === "SUCCEEDED" || status === "FAILED" || status === "CANCELLED";
+  return (
+    status === "SUCCEEDED" || status === "FAILED" || status === "CANCELLED"
+  );
 }
 
 async function loadOwnedRun(runId: string, userId: string) {
@@ -65,11 +67,14 @@ async function loadOwnedRun(runId: string, userId: string) {
   return run;
 }
 
-function sendEvent(res: { write(chunk: string): boolean }, seq: number, event: AgentEvent): void {
+function sendEvent(
+  res: { write(chunk: string): boolean },
+  seq: number,
+  event: AgentEvent,
+): void {
   res.write(`id: ${seq}\ndata: ${JSON.stringify(event)}\n\n`);
 }
 
-/** SSE stream that replays from a cursor and then follows live events. */
 function streamFromChannel(
   channel: NonNullable<ReturnType<RunRegistry["get"]>>,
   res: { write(chunk: string): boolean; end(cb?: () => void): void },
@@ -131,156 +136,155 @@ function streamFromChannel(
   void drain();
 }
 
-runRouter.post(
-  "/runs",
-  requireAuth,
-  async (req, res, next) => {
-    try {
-      const body = z
-        .object({
-          prompt: z.string().trim().min(3, "prompt is too short").max(8_000),
-          mode: z.enum(["CREATE", "FIX"]).optional().default("CREATE"),
-        })
-        .safeParse(req.body);
-      if (!body.success) {
-        throw new AppError(400, `Invalid request: ${body.error.issues[0]?.message ?? "bad body"}`);
-      }
+runRouter.post("/", requireAuth, async (req, res, next) => {
+  try {
+    const body = z
+      .object({
+        prompt: z.string().trim().min(3, "prompt is too short").max(8_000),
+        mode: z.enum(["CREATE", "FIX"]).optional().default("CREATE"),
+      })
+      .safeParse(req.body);
+    if (!body.success) {
+      throw new AppError(
+        400,
+        `Invalid request: ${body.error.issues[0]?.message ?? "bad body"}`,
+      );
+    }
 
-      const userId = authenticatedUser(req);
-      const active = registry.activeRunIdFor(userId);
-      if (active) {
-        throw new AppError(409, `Another run is already in progress (${active})`);
-      }
+    const userId = authenticatedUser(req);
+    const active = registry.activeRunIdFor(userId);
+    if (active) {
+      throw new AppError(409, `Another run is already in progress (${active})`);
+    }
 
-      const run = await prisma.agentRun.create({
-        data: {
-          userId,
-          prompt: body.data.prompt,
-          mode: body.data.mode,
-          status: "RUNNING",
-        },
+    const run = await prisma.agentRun.create({
+      data: {
+        userId,
+        prompt: body.data.prompt,
+        mode: body.data.mode,
+        status: "RUNNING",
+      },
+    });
+    registry.open(run.id, userId);
+    const workspace = new DockerWorkspace(userId);
+    startRun(registry, run.id, userId, body.data.prompt, workspace);
+    res.status(202).json({ runId: run.id, status: "RUNNING" });
+  } catch (err) {
+    next(err);
+  }
+});
+
+runRouter.get("/", requireAuth, async (req, res, next) => {
+  try {
+    const runs = await prisma.agentRun.findMany({
+      where: { userId: authenticatedUser(req) },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
+    res.json({ runs: runs.map(serializeRun) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+runRouter.get("/:id", requireAuth, async (req, res, next) => {
+  try {
+    const run = await loadOwnedRun(
+      runIdFromParams(req),
+      authenticatedUser(req),
+    );
+    const stepCount = await prisma.agentStep.count({
+      where: { runId: run.id },
+    });
+    res.json({ run: serializeRun(run), steps: stepCount });
+  } catch (err) {
+    next(err);
+  }
+});
+
+runRouter.post("/:id/cancel", requireAuth, async (req, res, next) => {
+  try {
+    const run = await loadOwnedRun(
+      runIdFromParams(req),
+      authenticatedUser(req),
+    );
+    const channel = registry.get(run.id);
+    if (channel) {
+      registry.cancel(run.id);
+      res.json({ ok: true, cancelling: true });
+      return;
+    }
+    if (!isTerminalStatus(run.status)) {
+      // No channel means the API process restarted mid-run: finalize here.
+      await prisma.agentRun.update({
+        where: { id: run.id },
+        data: { status: "CANCELLED", finishedAt: new Date() },
       });
-      registry.open(run.id, userId);
-      const workspace = new DockerWorkspace(userId);
-      startRun(registry, run.id, userId, body.data.prompt, workspace);
-      res.status(202).json({ runId: run.id, status: "RUNNING" });
-    } catch (err) {
-      next(err);
-    }
-  },
-);
-
-runRouter.get(
-  "/runs",
-  requireAuth,
-  async (req, res, next) => {
-    try {
-      const runs = await prisma.agentRun.findMany({
-        where: { userId: authenticatedUser(req) },
-        orderBy: { createdAt: "desc" },
-        take: 50,
-      });
-      res.json({ runs: runs.map(serializeRun) });
-    } catch (err) {
-      next(err);
-    }
-  },
-);
-
-runRouter.get(
-  "/runs/:id",
-  requireAuth,
-  async (req, res, next) => {
-    try {
-      const run = await loadOwnedRun(runIdFromParams(req), authenticatedUser(req));
-      const stepCount = await prisma.agentStep.count({ where: { runId: run.id } });
-      res.json({ run: serializeRun(run), steps: stepCount });
-    } catch (err) {
-      next(err);
-    }
-  },
-);
-
-runRouter.post(
-  "/runs/:id/cancel",
-  requireAuth,
-  async (req, res, next) => {
-    try {
-      const run = await loadOwnedRun(runIdFromParams(req), authenticatedUser(req));
-      const channel = registry.get(run.id);
-      if (channel) {
-        registry.cancel(run.id);
-        res.json({ ok: true, cancelling: true });
-        return;
-      }
-      if (!isTerminalStatus(run.status)) {
-        // No channel means the API process restarted mid-run: finalize here.
-        await prisma.agentRun.update({
-          where: { id: run.id },
-          data: { status: "CANCELLED", finishedAt: new Date() },
-        });
-        res.json({ ok: true, cancelled: true });
-        return;
-      }
       res.json({ ok: true, cancelled: true });
-    } catch (err) {
-      next(err);
+      return;
     }
-  },
-);
+    res.json({ ok: true, cancelled: true });
+  } catch (err) {
+    next(err);
+  }
+});
 
-runRouter.get(
-  "/runs/:id/events",
-  requireAuth,
-  async (req, res, next) => {
-    try {
-      const run = await loadOwnedRun(runIdFromParams(req), authenticatedUser(req));
-      const cursor = parseCursor(req);
-      res.writeHead(200, {
-        "content-type": "text/event-stream",
-        "cache-control": "no-cache, no-transform",
-        connection: "keep-alive",
-        "x-accel-buffering": "no",
-      });
-      res.write(`retry: 2000\n\n`);
-      const channel = registry.get(run.id);
-      if (channel) {
-        streamFromChannel(channel, res, req, cursor);
-        return;
-      }
-      // Channel absent (expired / server restarted): replay persisted events.
-      // A non-terminal run is a leftover from a restart — finalize it here.
-      const steps = await prisma.agentStep.findMany({
-        where: { runId: run.id, seq: { gt: cursor } },
-        orderBy: { seq: "asc" },
-      });
-      let lastSeq = cursor;
-      for (const step of steps) {
-        lastSeq = step.seq;
-        sendEvent(res, step.seq, step.payload as AgentEvent);
-      }
-      if (isTerminalStatus(run.status) || steps.some((step) => step.type === "done")) {
-        res.end();
-        return;
-      }
-      const synthetic: AgentEvent = {
-        type: "done",
-        status: "FAILED",
-        summary: "Run was interrupted when the API server restarted. Start a new run.",
-        steps: 0,
-        durationMs: 0,
-        error: { code: "SERVER_RESTARTED", message: "Run was interrupted by a server restart." },
-      };
-      await prisma.agentRun
-        .update({
-          where: { id: run.id },
-          data: { status: "FAILED", finishedAt: new Date() },
-        })
-        .catch(() => undefined);
-      sendEvent(res, lastSeq + 1, synthetic);
-      res.end();
-    } catch (err) {
-      next(err);
+runRouter.get("/:id/events", requireAuth, async (req, res, next) => {
+  try {
+    const run = await loadOwnedRun(
+      runIdFromParams(req),
+      authenticatedUser(req),
+    );
+    const cursor = parseCursor(req);
+    res.writeHead(200, {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache, no-transform",
+      connection: "keep-alive",
+      "x-accel-buffering": "no",
+    });
+    res.write(`retry: 2000\n\n`);
+    const channel = registry.get(run.id);
+    if (channel) {
+      streamFromChannel(channel, res, req, cursor);
+      return;
     }
-  },
-);
+    const steps = await prisma.agentStep.findMany({
+      where: { runId: run.id, seq: { gt: cursor } },
+      orderBy: { seq: "asc" },
+    });
+    let lastSeq = cursor;
+    for (const step of steps) {
+      lastSeq = step.seq;
+      sendEvent(res, step.seq, step.payload as AgentEvent);
+    }
+    if (
+      isTerminalStatus(run.status) ||
+      steps.some((step) => step.type === "done")
+    ) {
+      res.end();
+      return;
+    }
+    const synthetic: AgentEvent = {
+      type: "done",
+      status: "FAILED",
+      summary:
+        "Run was interrupted when the API server restarted. Start a new run.",
+      steps: 0,
+      durationMs: 0,
+      error: {
+        code: "SERVER_RESTARTED",
+        message: "Run was interrupted by a server restart.",
+      },
+    };
+    await prisma.agentRun
+      .update({
+        where: { id: run.id },
+        data: { status: "FAILED", finishedAt: new Date() },
+      })
+      .catch(() => undefined);
+    sendEvent(res, lastSeq + 1, synthetic);
+    res.end();
+  } catch (err) {
+    next(err);
+  }
+});

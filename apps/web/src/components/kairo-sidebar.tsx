@@ -6,14 +6,21 @@ import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import type { LucideIcon } from "lucide-react";
 import {
+  CircleCheck,
+  CircleDot,
+  CircleX,
   GitBranch,
   MessagesSquare,
   LayoutDashboard,
   LogOut,
   RotateCw,
   Send,
+  OctagonPause,
 } from "lucide-react";
 import { apiFetch, githubLoginUrl, type PublicUser } from "@/lib/api";
+import type { GithubEventItem } from "@/lib/api";
+import { useGithubEvents } from "@/lib/use-github-events";
+import { useSessions } from "@/lib/use-sessions";
 import { safeAvatarUrl } from "@/lib/utils";
 import {
   Sidebar,
@@ -49,6 +56,8 @@ export function KairoSidebar({ user }: { user: PublicUser | null }) {
   const pathname = usePathname();
   const router = useRouter();
   const [loggingOut, setLoggingOut] = React.useState(false);
+  const { sessions } = useSessions();
+  const githubEvents = useGithubEvents();
 
   const logout = async () => {
     setLoggingOut(true);
@@ -152,6 +161,89 @@ export function KairoSidebar({ user }: { user: PublicUser | null }) {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {sessions.length > 0 && (
+          <SidebarGroup className="mt-2">
+            <SidebarGroupLabel className="text-[11px] font-medium uppercase tracking-widest text-neutral-400">
+              Sessions
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {sessions.slice(0, 6).map((run, i) => {
+                  const StateIcon =
+                    run.status === "RUNNING"
+                      ? CircleDot
+                      : run.status === "SUCCEEDED"
+                        ? CircleCheck
+                        : run.status === "FAILED"
+                          ? CircleX
+                          : OctagonPause;
+                  return (
+                    <motion.li
+                      key={run.id}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.04 * i, duration: 0.35 }}
+                    >
+                      <SidebarMenuButton
+                        isActive={false}
+                        tooltip={run.prompt}
+                        className="cursor-pointer text-xs text-neutral-500 hover:text-neutral-950 data-[active=true]:bg-orange-50 data-[active=true]:text-orange-600"
+                        render={
+                          <Link href={`/agent?run=${run.id}`}>
+                            <StateIcon
+                              className={
+                                run.status === "RUNNING"
+                                  ? "size-3.5 shrink-0 animate-pulse text-orange-500"
+                                  : run.status === "SUCCEEDED"
+                                    ? "size-3.5 shrink-0 text-emerald-500"
+                                    : run.status === "FAILED"
+                                      ? "size-3.5 shrink-0 text-red-500"
+                                      : "size-3.5 shrink-0 text-neutral-400"
+                              }
+                            />
+                            <span className="truncate">{sessionTitle(run.prompt)}</span>
+                          </Link>
+                        }
+                      />
+                    </motion.li>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {githubEvents.length > 0 && (
+          <SidebarGroup className="mt-2">
+            <SidebarGroupLabel className="text-[11px] font-medium uppercase tracking-widest text-neutral-400">
+              GitHub activity
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {githubEvents.slice(0, 5).map((event, i) => (
+                  <motion.li
+                    key={event.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.04 * i, duration: 0.35 }}
+                  >
+                    <SidebarMenuButton
+                      tooltip={eventTitle(event)}
+                      className="cursor-pointer text-xs text-neutral-500 hover:text-orange-600"
+                      render={
+                        <Link href={`/agent?task=${encodeURIComponent(taskFromEvent(event))}`}>
+                          <GitBranch className="size-3.5 shrink-0 text-neutral-300" />
+                          <span className="truncate">{eventTitle(event)}</span>
+                        </Link>
+                      }
+                    />
+                  </motion.li>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter className="border-t p-4">
@@ -195,4 +287,26 @@ export function KairoSidebar({ user }: { user: PublicUser | null }) {
       </SidebarFooter>
     </Sidebar>
   );
+}
+
+function sessionTitle(prompt: string): string {
+  return prompt.length > 38 ? `${prompt.slice(0, 38)}…` : prompt;
+}
+
+function eventTitle(event: GithubEventItem): string {
+  const kind = event.eventType === "issues" ? "Issue" : event.eventType === "push" ? "Push" : "PR";
+  const action = event.action ? ` ${event.action}` : "";
+  const where = event.number ? ` #${event.number}` : "";
+  return `${kind}${action}${where} · ${event.title ?? event.repo ?? "GitHub"}`;
+}
+
+/** Prompt draft shown in the agent console for this activity item. */
+export function taskFromEvent(event: GithubEventItem): string {
+  const kind = event.eventType === "issues" ? "Issue" : event.eventType === "push" ? "Push" : "Pull request";
+  const link =
+    event.url ??
+    (event.repo ? `https://github.com/${event.repo}${event.number ? `/issues/${event.number}` : ""}` : null);
+  return `Work on GitHub ${kind}${event.number ? ` #${event.number}` : ""}${
+    event.repo ? ` in ${event.repo}` : ""
+  }${event.title ? ` — ${event.title}` : ""}${link ? `. Details: ${link}` : ""}. Read the surrounding code, fix it, and open a pull request.`;
 }

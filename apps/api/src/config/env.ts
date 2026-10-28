@@ -56,6 +56,10 @@ const envSchema = z.object({
     .url()
     .default("https://github.com/login/oauth/access_token"),
   GITHUB_API_URL: z.string().url().default("https://api.github.com"),
+  // GitHub App numeric id (Settings → Developer settings → GitHub Apps).
+  GITHUB_APP_ID: z.coerce.number().int().positive().optional(),
+  // Shared secret used to verify `x-hub-signature-256` on webhook deliveries.
+  GITHUB_WEBHOOK_SECRET: z.string().min(1).optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -72,6 +76,12 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data;
+
+if (!env.GITHUB_APP_ID || !env.GITHUB_WEBHOOK_SECRET) {
+  console.warn(
+    "[api] GITHUB_APP_ID and/or GITHUB_WEBHOOK_SECRET missing — the GitHub webhook receiver will reject deliveries until both are set.",
+  );
+}
 
 /** 32-byte AES-256 key used for GithubConnection token encryption. */
 export const encryptionKey = Buffer.from(env.TOKEN_ENCRYPTION_KEY, "base64");

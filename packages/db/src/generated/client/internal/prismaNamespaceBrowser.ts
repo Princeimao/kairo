@@ -54,6 +54,7 @@ export const ModelName = {
   User: 'User',
   GithubConnection: 'GithubConnection',
   Session: 'Session',
+  GithubEvent: 'GithubEvent',
   Sandbox: 'Sandbox',
   AgentRun: 'AgentRun',
   AgentStep: 'AgentStep'
@@ -113,6 +114,25 @@ export const SessionScalarFieldEnum = {
 } as const
 
 export type SessionScalarFieldEnum = (typeof SessionScalarFieldEnum)[keyof typeof SessionScalarFieldEnum]
+
+
+export const GithubEventScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  deliveryId: 'deliveryId',
+  eventType: 'eventType',
+  action: 'action',
+  installationId: 'installationId',
+  repoOwner: 'repoOwner',
+  repoName: 'repoName',
+  number: 'number',
+  title: 'title',
+  url: 'url',
+  payload: 'payload',
+  createdAt: 'createdAt'
+} as const
+
+export type GithubEventScalarFieldEnum = (typeof GithubEventScalarFieldEnum)[keyof typeof GithubEventScalarFieldEnum]
 
 
 export const SandboxScalarFieldEnum = {
