@@ -35,14 +35,21 @@ async function assertNotBusy(userId: string): Promise<void> {
       status: { in: ["QUEUED", "RUNNING"] },
       createdAt: { lt: cutoff },
     },
-    data: { status: "FAILED", finishedAt: new Date(), errorMessage: "Run timed out (worker did not finish it)." },
+    data: {
+      status: "FAILED",
+      finishedAt: new Date(),
+      errorMessage: "Run timed out (worker did not finish it).",
+    },
   });
   const active = await prisma.agentRun.findFirst({
     where: { userId, status: { in: ["QUEUED", "RUNNING"] } },
     orderBy: { createdAt: "desc" },
   });
   if (active) {
-    throw new AppError(409, `Another run is already in progress (${active.id})`);
+    throw new AppError(
+      409,
+      `Another run is already in progress (${active.id})`,
+    );
   }
 }
 
@@ -94,7 +101,11 @@ export async function startRun(input: StartRunInput): Promise<StartedRun> {
     },
   });
   await prisma.message.create({
-    data: { conversationId: conversation.id, role: "USER", content: input.prompt },
+    data: {
+      conversationId: conversation.id,
+      role: "USER",
+      content: input.prompt,
+    },
   });
 
   try {
@@ -108,7 +119,10 @@ export async function startRun(input: StartRunInput): Promise<StartedRun> {
         errorMessage: `Could not queue run: ${error instanceof Error ? error.message : String(error)}`,
       },
     });
-    throw new AppError(503, "Could not queue the run — is Redis running? (REDIS_URL)");
+    throw new AppError(
+      503,
+      "Could not queue the run — is Redis running? (REDIS_URL)",
+    );
   }
 
   return { runId: run.id, conversationId: conversation.id, sessionId };

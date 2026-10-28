@@ -47,12 +47,16 @@ function errorText(error: unknown): string {
 }
 
 function isTerminal(status: string): boolean {
-  return status === "SUCCEEDED" || status === "FAILED" || status === "CANCELLED";
+  return (
+    status === "SUCCEEDED" || status === "FAILED" || status === "CANCELLED"
+  );
 }
 
 function isInfraError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /fetch failed|ECONNREFUSED|ECONNRESET|socket|not healthy|network|aborted/i.test(message);
+  return /fetch failed|ECONNREFUSED|ECONNRESET|socket|not healthy|network|aborted/i.test(
+    message,
+  );
 }
 
 export async function processRun({ runId, userId }: RunJobData): Promise<void> {
@@ -76,7 +80,11 @@ export async function processRun({ runId, userId }: RunJobData): Promise<void> {
   try {
     if (await redis.get(runCancelKey(runId))) {
       log(runId, "cancel flag already set — cancelling before start");
-      await finalize(runId, "CANCELLED", "Cancelled before the worker started it.");
+      await finalize(
+        runId,
+        "CANCELLED",
+        "Cancelled before the worker started it.",
+      );
       return;
     }
 
@@ -86,9 +94,14 @@ export async function processRun({ runId, userId }: RunJobData): Promise<void> {
 
     const conversation =
       run.conversationId !== null
-        ? await prisma.conversation.findUnique({ where: { id: run.conversationId } })
+        ? await prisma.conversation.findUnique({
+            where: { id: run.conversationId },
+          })
         : null;
-    log(runId, `conversation=${run.conversationId ?? "none"} opencodeSession=${conversation?.opencodeSessionId ?? "none"}`);
+    log(
+      runId,
+      `conversation=${run.conversationId ?? "none"} opencodeSession=${conversation?.opencodeSessionId ?? "none"}`,
+    );
 
     const ws = new DockerWorkspace(userId);
     let attempt = 0;
@@ -102,7 +115,11 @@ export async function processRun({ runId, userId }: RunJobData): Promise<void> {
         if (attempt === 0 && isInfraError(error)) {
           attempt += 1;
           log(runId, `infra error, retrying once: ${message}`);
-          emitter.emit({ type: "error", code: "INFRA_RETRY", message: `Retrying once after infra error: ${message}` });
+          emitter.emit({
+            type: "error",
+            code: "INFRA_RETRY",
+            message: `Retrying once after infra error: ${message}`,
+          });
           throttle.flushAll();
           await emitter.flush();
           continue;
@@ -167,19 +184,24 @@ async function runOnce(
 
   const containerName = running.containerName ?? containerNameFor(run.userId);
   const baseUrl = containerBaseUrl(running.hostPort);
-  log(run.id, `waiting for opencode health at ${baseUrl} (timeout ${HEALTH_TIMEOUT_MS}ms)`);
+  log(
+    run.id,
+    `waiting for opencode health at ${baseUrl} (timeout ${HEALTH_TIMEOUT_MS}ms)`,
+  );
+
   const healthStarted = Date.now();
   await waitForHealth(baseUrl, containerName, HEALTH_TIMEOUT_MS);
   log(run.id, `opencode healthy after ${Date.now() - healthStarted}ms`);
   const client = createClient(baseUrl, containerName);
 
-  // Reuse the conversation's OpenCode session when it still exists on the
-  // (volume-persisted) server; otherwise create one and remember it.
   let sessionId = conversation?.opencodeSessionId ?? null;
   if (sessionId !== null) {
     const existing = await client.session.get({ path: { id: sessionId } });
     if (existing.error !== undefined) {
-      log(run.id, `stored opencode session ${sessionId} gone (${JSON.stringify(existing.error)}) — creating a new one`);
+      log(
+        run.id,
+        `stored opencode session ${sessionId} gone (${JSON.stringify(existing.error)}) — creating a new one`,
+      );
       sessionId = null;
     } else {
       log(run.id, `reusing opencode session ${sessionId}`);
@@ -187,16 +209,24 @@ async function runOnce(
   }
   if (sessionId === null) {
     const created = await client.session.create({
-      body: { title: run.prompt.replace(/\s+/g, " ").trim().slice(0, 60) || "Kairo run" },
+      body: {
+        title:
+          run.prompt.replace(/\s+/g, " ").trim().slice(0, 60) || "Kairo run",
+      },
     });
     if (created.error !== undefined || created.data === undefined) {
-      throw new Error(`could not create opencode session: ${JSON.stringify(created.error ?? {})}`);
+      throw new Error(
+        `could not create opencode session: ${JSON.stringify(created.error ?? {})}`,
+      );
     }
     sessionId = created.data.id;
     log(run.id, `created opencode session ${sessionId}`);
     if (conversation !== null) {
       await prisma.conversation
-        .update({ where: { id: conversation.id }, data: { opencodeSessionId: sessionId } })
+        .update({
+          where: { id: conversation.id },
+          data: { opencodeSessionId: sessionId },
+        })
         .catch(() => undefined);
     }
   }
@@ -227,8 +257,12 @@ async function runOnce(
         sawAnyEvent = true;
         log(run.id, `first event received: ${event.type}`);
       }
-      const properties = (event as { properties?: { sessionID?: string } }).properties;
-      if (properties?.sessionID !== undefined && properties.sessionID !== sessionId) {
+      const properties = (event as { properties?: { sessionID?: string } })
+        .properties;
+      if (
+        properties?.sessionID !== undefined &&
+        properties.sessionID !== sessionId
+      ) {
         droppedOtherSession += 1;
         continue;
       }
@@ -242,13 +276,44 @@ async function runOnce(
         continue;
       }
       if (event.type === "session.error") {
+        const props = (
+          event as {
+            properties?: {
+              sessionID?: string;
+              error?: unknown;
+            };
+          }
+        ).properties;
+
+        const rawError = props?.error;
+
+        // Preserve the full structured error, including nested data.
+        const details =
+          rawError instanceof Error
+            ? {
+                name: rawError.name,
+                message: rawError.message,
+                stack: rawError.stack,
+              }
+            : rawError;
+
+        log(
+          run.id,
+          `session.error payload: ${JSON.stringify({
+            sessionID: props?.sessionID,
+            error: details,
+          })}`,
+        );
+
         const message =
-          (event as { properties: { error?: { name?: string; message?: string } } })
-            .properties.error?.message ?? "OpenCode session error";
-        log(run.id, `session.error event: ${message}`);
+          rawError !== undefined
+            ? JSON.stringify(details)
+            : "OpenCode emitted session.error without an error payload";
+
         outcomeBox.current = { kind: "error", message };
         return;
       }
+
       if (event.type === "session.idle") {
         log(run.id, "session.idle event — turn complete");
         outcomeBox.current = { kind: "idle" };
@@ -302,7 +367,10 @@ async function runOnce(
       `opencode rejected the prompt (HTTP ${JSON.stringify(promptResult.error)}) — check model/provider config in the container`,
     );
   }
-  log(run.id, `prompt accepted in ${Date.now() - promptStarted}ms — streaming events`);
+  log(
+    run.id,
+    `prompt accepted in ${Date.now() - promptStarted}ms — streaming events`,
+  );
 
   // Stall watchdog: warn when nothing arrives, fail when the stream is dead.
   const stall = (async (): Promise<"stall"> => {
@@ -358,8 +426,8 @@ async function runOnce(
 
   if (finalOutcome.kind !== "idle") {
     // Best-effort abort so the container's generation stops burning tokens.
-    const abortResult = await client
-      .session.abort({ path: { id: sessionId } })
+    const abortResult = await client.session
+      .abort({ path: { id: sessionId } })
       .then(() => "ok" as const)
       .catch((error: unknown) => `failed: ${errorText(error)}`);
     log(run.id, `session.abort: ${abortResult}`);
@@ -369,10 +437,13 @@ async function runOnce(
   throttle.flushAll();
 
   const summary =
-    finalOutcome.kind === "idle" || finalOutcome.kind === "timeout"
-      ? await lastAssistantText(client, sessionId)
-      : null;
-  log(run.id, `assistant summary: ${summary === null ? "none" : `${summary.length} chars`}`);
+    finalOutcome.kind === "cancelled"
+      ? null
+      : await lastAssistantText(client, sessionId);
+  log(
+    run.id,
+    `assistant summary: ${summary === null ? "none" : `${summary.length} chars`}`,
+  );
   const clippedSummary =
     summary !== null ? summary.slice(0, MAX_SUMMARY_CHARS) : null;
 
@@ -392,12 +463,21 @@ async function runOnce(
   }
 
   let prUrl: string | null = null;
-  if (status === "SUCCEEDED" && run.repoFullName !== null && clippedSummary !== null) {
+  if (
+    status === "SUCCEEDED" &&
+    run.repoFullName !== null &&
+    clippedSummary !== null
+  ) {
     try {
       log(run.id, "opening pull request via github flow");
       prUrl = await githubFinish(
         ws,
-        { id: run.id, userId: run.userId, repoFullName: run.repoFullName, prompt: run.prompt },
+        {
+          id: run.id,
+          userId: run.userId,
+          repoFullName: run.repoFullName,
+          prompt: run.prompt,
+        },
         clippedSummary,
       );
       log(run.id, `pull request: ${prUrl}`);
@@ -412,7 +492,11 @@ async function runOnce(
     }
   }
 
-  if (status === "SUCCEEDED" && clippedSummary !== null && run.conversationId !== null) {
+  if (
+    status === "SUCCEEDED" &&
+    clippedSummary !== null &&
+    run.conversationId !== null
+  ) {
     await prisma.message
       .create({
         data: {
@@ -443,7 +527,10 @@ async function runOnce(
       },
     })
     .catch(() => undefined);
-  log(run.id, `run finalized: ${status}${errorMessage ? ` (${errorMessage})` : ""}`);
+  log(
+    run.id,
+    `run finalized: ${status}${errorMessage ? ` (${errorMessage})` : ""}`,
+  );
 }
 
 function mapPart(part: Part, throttle: PartThrottle): void {

@@ -22,4 +22,6 @@ runWorker.on("error", (error) => {
   console.error(`[worker] error: ${error.message}`);
 });
 
-console.log(`[worker] listening on queue "${RUN_QUEUE_NAME}" (${env.REDIS_URL})`);
+console.log(
+  `[worker] listening on queue "${RUN_QUEUE_NAME}" (${env.REDIS_URL})`,
+);
