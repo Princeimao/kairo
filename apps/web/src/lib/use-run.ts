@@ -13,7 +13,7 @@ export type ToolStep = {
 };
 
 export type RunView = {
-  status: RunStatus | "WAITING";
+  status: RunStatus | "IDLE";
   prompt: string;
   workspace: "starting" | "ready" | null;
   texts: string[];
@@ -30,7 +30,7 @@ export type RunView = {
 };
 
 const EMPTY: RunView = {
-  status: "WAITING",
+  status: "IDLE",
   prompt: "",
   workspace: null,
   texts: [],
@@ -178,7 +178,7 @@ export function useRunStream() {
       source.onerror = () => {
         const failed = new ApiError(0, "Lost connection to the Kairo API");
         setView((prev) =>
-          prev.status === "RUNNING" || prev.status === "WAITING"
+          prev.status === "QUEUED" || prev.status === "RUNNING"
             ? {
                 ...prev,
                 error: { code: "STREAM_LOST", message: failed.message },
@@ -194,7 +194,7 @@ export function useRunStream() {
   const start = useCallback(
     async (prompt: string, mode: "CREATE" | "FIX" = "CREATE") => {
       close();
-      setView({ ...EMPTY, prompt });
+      setView({ ...EMPTY, prompt, status: "QUEUED" });
       try {
         const created = await runs.create({ prompt, mode });
         runIdRef.current = created.runId;
@@ -232,7 +232,7 @@ export function useRunStream() {
       mode: "CREATE" | "FIX" = "CREATE",
     ) => {
       close();
-      setView({ ...EMPTY, prompt });
+      setView({ ...EMPTY, prompt, status: "QUEUED" });
       try {
         const created = await conversations.message(conversationId, {
           prompt,

@@ -12,6 +12,7 @@ import {
   MessagesSquare,
   LayoutDashboard,
   LogOut,
+  Plus,
   RotateCw,
 } from "lucide-react";
 import { apiFetch, githubLoginUrl, type PublicUser } from "@/lib/api";
@@ -55,14 +56,9 @@ export function KairoSidebar({ user }: { user: PublicUser | null }) {
   const [loggingOut, setLoggingOut] = React.useState(false);
   const { sessions } = useSessions();
   const githubEvents = useGithubEvents();
-  const [currentConversation, setCurrentConversation] = React.useState<
-    string | null
-  >(null);
-
-  React.useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    setCurrentConversation(params.get("conversation"));
-  }, [pathname]);
+  const currentConversation = pathname.startsWith("/agent/")
+    ? pathname.slice("/agent/".length)
+    : null;
 
   const logout = async () => {
     setLoggingOut(true);
@@ -167,72 +163,78 @@ export function KairoSidebar({ user }: { user: PublicUser | null }) {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {sessions.length > 0 && (
-          <SidebarGroup className="mt-2">
-            <SidebarGroupLabel className="text-[11px] font-medium uppercase tracking-widest text-neutral-400">
-              Sessions
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {sessions.slice(0, 6).map((session, i) => (
-                  <motion.li
-                    key={session.id}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.04 * i, duration: 0.35 }}
-                  >
-                    <SidebarMenuButton
-                      isActive={false}
-                      tooltip={session.title}
-                      className="cursor-pointer text-xs font-medium text-neutral-700 hover:text-neutral-950"
-                      render={
-                        <span className="flex items-center gap-2">
-                          <MessagesSquare className="size-3.5 shrink-0 text-neutral-400" />
-                          <span className="truncate">{session.title}</span>
-                        </span>
-                      }
-                    />
-                    {session.conversations.length > 0 && (
-                      <SidebarMenu className="ml-4 mt-0.5 border-l border-neutral-200/70 pl-2">
-                        {session.conversations
-                          .slice(-4)
-                          .reverse()
-                          .map((conversation) => {
-                            const StateIcon =
-                              conversation.lastRole === "USER"
-                                ? CircleDot
-                                : CircleCheck;
-                            return (
-                              <SidebarMenuItem key={conversation.id}>
-                                <SidebarMenuButton
-                                  isActive={
-                                    pathname === "/agent" &&
-                                    currentConversation === conversation.id
-                                  }
-                                  tooltip={conversation.preview ?? "Conversation"}
-                                  className="cursor-pointer text-[11px] text-neutral-500 hover:text-neutral-950 data-[active=true]:bg-orange-50 data-[active=true]:text-orange-600"
-                                  render={
-                                    <Link
-                                      href={`/agent?conversation=${conversation.id}`}
-                                    >
-                                      <StateIcon className="size-3 shrink-0 text-neutral-300" />
-                                      <span className="truncate">
-                                        {conversation.preview ?? "Empty conversation"}
-                                      </span>
-                                    </Link>
-                                  }
-                                />
-                              </SidebarMenuItem>
-                            );
-                          })}
-                      </SidebarMenu>
-                    )}
-                  </motion.li>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
+        <SidebarGroup className="mt-2">
+          <SidebarGroupLabel className="text-[11px] font-medium uppercase tracking-widest text-neutral-400">
+            Sessions
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  isActive={pathname === "/agent" && currentConversation === null}
+                  tooltip="New chat"
+                  className="cursor-pointer text-xs font-medium text-orange-600 hover:text-orange-700 data-[active=true]:bg-orange-50"
+                  render={
+                    <Link href="/agent">
+                      <Plus className="size-3.5 shrink-0" />
+                      <span>New chat</span>
+                    </Link>
+                  }
+                />
+              </SidebarMenuItem>
+              {sessions.slice(0, 6).map((session, i) => (
+                <motion.li
+                  key={session.id}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.04 * i, duration: 0.35 }}
+                >
+                  <SidebarMenuButton
+                    isActive={false}
+                    tooltip={session.title}
+                    className="cursor-pointer text-xs font-medium text-neutral-700 hover:text-neutral-950"
+                    render={
+                      <span className="flex items-center gap-2">
+                        <MessagesSquare className="size-3.5 shrink-0 text-neutral-400" />
+                        <span className="truncate">{session.title}</span>
+                      </span>
+                    }
+                  />
+                  {session.conversations.length > 0 && (
+                    <SidebarMenu className="ml-4 mt-0.5 border-l border-neutral-200/70 pl-2">
+                      {session.conversations
+                        .slice(-4)
+                        .reverse()
+                        .map((conversation) => {
+                          const StateIcon =
+                            conversation.lastRole === "USER"
+                              ? CircleDot
+                              : CircleCheck;
+                          return (
+                            <SidebarMenuItem key={conversation.id}>
+                              <SidebarMenuButton
+                                isActive={currentConversation === conversation.id}
+                                tooltip={conversation.preview ?? "Conversation"}
+                                className="cursor-pointer text-[11px] text-neutral-500 hover:text-neutral-950 data-[active=true]:bg-orange-50 data-[active=true]:text-orange-600"
+                                render={
+                                  <Link href={`/agent/${conversation.id}`}>
+                                    <StateIcon className="size-3 shrink-0 text-neutral-300" />
+                                    <span className="truncate">
+                                      {conversation.preview ?? "Empty conversation"}
+                                    </span>
+                                  </Link>
+                                }
+                              />
+                            </SidebarMenuItem>
+                          );
+                        })}
+                    </SidebarMenu>
+                  )}
+                </motion.li>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
 
         {githubEvents.length > 0 && (
           <SidebarGroup className="mt-2">
