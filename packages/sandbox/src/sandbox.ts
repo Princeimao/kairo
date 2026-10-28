@@ -131,6 +131,8 @@ export interface RunningSandbox {
   containerName: string;
   image: string;
   reused: boolean;
+  /** Host loopback port published for `opencode serve` (container 4096). */
+  hostPort: number;
 }
 
 export interface SandboxStatus {
@@ -218,12 +220,28 @@ export class DockerWorkspace {
     }
     await this.ensureVolume(client, config.image);
     const reused = await this.ensureContainer(client, config, imageId);
+    const hostPort = await this.opencodeHostPort(client);
     return {
       volumeName: this.volumeName,
       containerName: this.containerName,
       image: config.image,
       reused,
+      hostPort,
     };
+  }
+
+  /** Parsed from the container's published 4096 binding (127.0.0.1 only). */
+  private async opencodeHostPort(client: DockerClientInstance): Promise<number> {
+    const state = await client.containerInspect(this.containerName);
+    const bindings = state.NetworkSettings?.Ports?.["4096/tcp"];
+    const hostPort = Number.parseInt(bindings?.[0]?.HostPort ?? "", 10);
+    if (!Number.isFinite(hostPort) || hostPort <= 0) {
+      throw new WorkspaceError(
+        `container ${this.containerName} has no published opencode port`,
+        "NO_OPENCODE_PORT",
+      );
+    }
+    return hostPort;
   }
 
   private async ensureVolume(client: DockerClientInstance, image: string): Promise<void> {
@@ -311,6 +329,8 @@ export class DockerWorkspace {
     }
     if (env.get("OPENCODE_SERVER_PASSWORD") !== serverPasswordFor(this.containerName)) return false;
     if (env.get("KAIRO_LLM_TOKEN") !== llmTokenFor(this.containerName)) return false;
+    const bindings = state.HostConfig?.PortBindings?.["4096/tcp"] ?? [];
+    if (!bindings.some((binding) => (binding.HostIp ?? "") === "127.0.0.1")) return false;
     return true;
   }
 
@@ -361,6 +381,7 @@ export class DockerWorkspace {
         WorkingDir: WORKSPACE_ROOT,
         Env: this.harnessEnv(),
         Labels: { [HARNESS_LABEL]: HARNESS_LABEL_VALUE },
+        ExposedPorts: { "4096/tcp": {} },
         AttachStdin: false,
         AttachStdout: false,
         AttachStderr: false,
@@ -377,6 +398,8 @@ export class DockerWorkspace {
           CapDrop: ["ALL"],
           SecurityOpt: ["no-new-privileges"],
           NetworkMode: wantedNetwork,
+          // opencode serve for the host-side worker — loopback only, basic auth.
+          PortBindings: { "4096/tcp": [{ HostIp: "127.0.0.1", HostPort: "" }] },
           // Lets the container reach the host-side LLM proxy + GitHub API.
           ExtraHosts:
             wantedNetwork === "none" ? undefined : ["host.docker.internal:host-gateway"],

@@ -1,0 +1,28 @@
+{
+  "name": "@kairo/worker",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@kairo/db": "^0.1.0",
+    "@kairo/run-queue": "*",
+    "@kairo/sandbox": "*",
+    "@opencode-ai/sdk": "^1.19.5",
+    "bullmq": "^6.5.0",
+    "ioredis": "^6.0.0",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.1",
+    "eslint": "^9.20.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.9.3"
+  }
+}
