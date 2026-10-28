@@ -25,6 +25,8 @@ import { GithubFlowError, githubFinish, githubPrepare } from "./github.js";
 const CANCEL_POLL_MS = 1_500;
 const HEALTH_TIMEOUT_MS = 90_000;
 const MAX_SUMMARY_CHARS = 100_000;
+const STALL_WARN_MS = 30_000;
+const STALL_FAIL_MS = 120_000;
 
 type Outcome =
   | { kind: "idle" }
@@ -34,6 +36,14 @@ type Outcome =
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function log(runId: string, message: string): void {
+  console.log(`[worker] run ${runId}: ${message}`);
+}
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function isTerminal(status: string): boolean {
@@ -47,13 +57,25 @@ function isInfraError(error: unknown): boolean {
 
 export async function processRun({ runId, userId }: RunJobData): Promise<void> {
   const run = await prisma.agentRun.findUnique({ where: { id: runId } });
-  if (run === null || isTerminal(run.status)) return;
+  if (run === null) {
+    console.log(`[worker] run ${runId} not found — dropping job`);
+    return;
+  }
+  if (isTerminal(run.status)) {
+    log(runId, `already ${run.status} — dropping job`);
+    return;
+  }
+  log(
+    runId,
+    `picked up (status=${run.status}, mode=${run.mode}, repo=${run.repoFullName ?? "none"}, prompt="${run.prompt.slice(0, 80).replace(/\s+/g, " ")}")`,
+  );
 
   const redis = createRedis(env.REDIS_URL);
   let emitter: StepEmitter | null = null;
 
   try {
     if (await redis.get(runCancelKey(runId))) {
+      log(runId, "cancel flag already set — cancelling before start");
       await finalize(runId, "CANCELLED", "Cancelled before the worker started it.");
       return;
     }
@@ -66,17 +88,20 @@ export async function processRun({ runId, userId }: RunJobData): Promise<void> {
       run.conversationId !== null
         ? await prisma.conversation.findUnique({ where: { id: run.conversationId } })
         : null;
+    log(runId, `conversation=${run.conversationId ?? "none"} opencodeSession=${conversation?.opencodeSessionId ?? "none"}`);
 
     const ws = new DockerWorkspace(userId);
     let attempt = 0;
     for (;;) {
       try {
         await runOnce(ws, run, conversation, emitter, throttle, redis);
+        log(runId, "finished without throwing");
         break;
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = errorText(error);
         if (attempt === 0 && isInfraError(error)) {
           attempt += 1;
+          log(runId, `infra error, retrying once: ${message}`);
           emitter.emit({ type: "error", code: "INFRA_RETRY", message: `Retrying once after infra error: ${message}` });
           throttle.flushAll();
           await emitter.flush();
@@ -86,7 +111,7 @@ export async function processRun({ runId, userId }: RunJobData): Promise<void> {
       }
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = errorText(error);
     console.error(`[worker] run ${runId} failed: ${message}`);
     emitter?.emit({ type: "error", code: "RUN_FAILED", message });
     await finalize(runId, "FAILED", message);
@@ -113,6 +138,10 @@ async function runOnce(
   redis: IORedis,
 ): Promise<void> {
   const running: RunningSandbox = await ws.ensureRunning();
+  log(
+    run.id,
+    `workspace running: container=${running.containerName} image=${running.image} hostPort=${running.hostPort}`,
+  );
   await prisma.sandbox
     .upsert({
       where: { userId: run.userId },
@@ -134,10 +163,14 @@ async function runOnce(
   emitter.emit({ type: "workspace", state: "ready" });
 
   await ensureWorkspaceConfig(ws);
+  log(run.id, "workspace config ensured");
 
   const containerName = running.containerName ?? containerNameFor(run.userId);
   const baseUrl = containerBaseUrl(running.hostPort);
+  log(run.id, `waiting for opencode health at ${baseUrl} (timeout ${HEALTH_TIMEOUT_MS}ms)`);
+  const healthStarted = Date.now();
   await waitForHealth(baseUrl, containerName, HEALTH_TIMEOUT_MS);
+  log(run.id, `opencode healthy after ${Date.now() - healthStarted}ms`);
   const client = createClient(baseUrl, containerName);
 
   // Reuse the conversation's OpenCode session when it still exists on the
@@ -145,7 +178,12 @@ async function runOnce(
   let sessionId = conversation?.opencodeSessionId ?? null;
   if (sessionId !== null) {
     const existing = await client.session.get({ path: { id: sessionId } });
-    if (existing.error !== undefined) sessionId = null;
+    if (existing.error !== undefined) {
+      log(run.id, `stored opencode session ${sessionId} gone (${JSON.stringify(existing.error)}) — creating a new one`);
+      sessionId = null;
+    } else {
+      log(run.id, `reusing opencode session ${sessionId}`);
+    }
   }
   if (sessionId === null) {
     const created = await client.session.create({
@@ -155,6 +193,7 @@ async function runOnce(
       throw new Error(`could not create opencode session: ${JSON.stringify(created.error ?? {})}`);
     }
     sessionId = created.data.id;
+    log(run.id, `created opencode session ${sessionId}`);
     if (conversation !== null) {
       await prisma.conversation
         .update({ where: { id: conversation.id }, data: { opencodeSessionId: sessionId } })
@@ -163,7 +202,9 @@ async function runOnce(
   }
 
   if (run.repoFullName !== null) {
+    log(run.id, `preparing github repo ${run.repoFullName}`);
     await githubPrepare(ws, run.repoFullName, run.userId);
+    log(run.id, "github repo ready");
   }
 
   await prisma.agentRun
@@ -171,17 +212,32 @@ async function runOnce(
     .catch(() => undefined);
 
   // Subscribe BEFORE prompting so no part update is missed.
+  log(run.id, "subscribing to opencode event stream");
   const { stream } = await client.event.subscribe();
   const outcomeBox: { current: Outcome } = { current: { kind: "timeout" } };
   let disposed = false;
+  let sawAnyEvent = false;
+  let matchedEvents = 0;
+  let droppedOtherSession = 0;
 
   const consume = (async () => {
     for await (const event of stream) {
       if (disposed) return;
+      if (!sawAnyEvent) {
+        sawAnyEvent = true;
+        log(run.id, `first event received: ${event.type}`);
+      }
       const properties = (event as { properties?: { sessionID?: string } }).properties;
-      if (properties?.sessionID !== undefined && properties.sessionID !== sessionId) continue;
+      if (properties?.sessionID !== undefined && properties.sessionID !== sessionId) {
+        droppedOtherSession += 1;
+        continue;
+      }
+      matchedEvents += 1;
       if (event.type === "message.part.updated") {
         const part = (event as { properties: { part: Part } }).properties.part;
+        if (matchedEvents <= 5 || part.type === "tool") {
+          log(run.id, `part: type=${part.type} id=${part.id}`);
+        }
         mapPart(part, throttle);
         continue;
       }
@@ -189,15 +245,24 @@ async function runOnce(
         const message =
           (event as { properties: { error?: { name?: string; message?: string } } })
             .properties.error?.message ?? "OpenCode session error";
+        log(run.id, `session.error event: ${message}`);
         outcomeBox.current = { kind: "error", message };
         return;
       }
       if (event.type === "session.idle") {
+        log(run.id, "session.idle event — turn complete");
         outcomeBox.current = { kind: "idle" };
         return;
       }
+      log(run.id, `event: ${event.type}`);
     }
-  })().catch(() => undefined);
+    log(
+      run.id,
+      `event stream ENDED without idle/error (sawAny=${sawAnyEvent}, matched=${matchedEvents}, otherSession=${droppedOtherSession})`,
+    );
+  })().catch((error) => {
+    log(run.id, `event stream crashed: ${errorText(error)}`);
+  });
 
   let cancelled = false;
   const cancelWait = (async () => {
@@ -205,6 +270,7 @@ async function runOnce(
       try {
         if (await redis.get(runCancelKey(run.id))) {
           cancelled = true;
+          log(run.id, "cancel flag detected — aborting wait");
           return;
         }
       } catch {
@@ -212,6 +278,48 @@ async function runOnce(
       }
       await sleep(CANCEL_POLL_MS);
     }
+  })();
+
+  // THE actual prompt. Without this the run waits forever for session.idle.
+  const promptText = buildPrompt(run);
+  log(
+    run.id,
+    `prompting session ${sessionId} (model=${env.OPENCODE_PROVIDER_ID}/${env.OPENCODE_MODEL}, chars=${promptText.length})`,
+  );
+  const promptStarted = Date.now();
+  const promptResult = await client.session.promptAsync({
+    path: { id: sessionId },
+    body: {
+      parts: [{ type: "text", text: promptText }],
+      model: {
+        providerID: env.OPENCODE_PROVIDER_ID,
+        modelID: env.OPENCODE_MODEL,
+      },
+    },
+  });
+  if (promptResult.error !== undefined) {
+    throw new Error(
+      `opencode rejected the prompt (HTTP ${JSON.stringify(promptResult.error)}) — check model/provider config in the container`,
+    );
+  }
+  log(run.id, `prompt accepted in ${Date.now() - promptStarted}ms — streaming events`);
+
+  // Stall watchdog: warn when nothing arrives, fail when the stream is dead.
+  const stall = (async (): Promise<"stall"> => {
+    await sleep(STALL_WARN_MS);
+    if (!disposed && !sawAnyEvent) {
+      log(
+        run.id,
+        `WARNING: no opencode events after ${STALL_WARN_MS}ms (baseUrl=${baseUrl}) — LLM proxy or model config is likely broken`,
+      );
+    }
+    await sleep(STALL_FAIL_MS - STALL_WARN_MS);
+    if (!disposed && !sawAnyEvent) {
+      log(run.id, `giving up: zero events after ${STALL_FAIL_MS}ms`);
+      return "stall";
+    }
+    while (!disposed) await sleep(1_000);
+    return "stall";
   })();
 
   let timeoutHandle: NodeJS.Timeout | undefined;
@@ -224,9 +332,14 @@ async function runOnce(
     consume.then(() => "consume" as const),
     cancelWait.then(() => "cancel" as const),
     timedOut,
+    stall,
   ]);
   disposed = true;
   if (timeoutHandle) clearTimeout(timeoutHandle);
+  log(
+    run.id,
+    `wait over: raced=${raced} sawAny=${sawAnyEvent} matched=${matchedEvents} otherSession=${droppedOtherSession}`,
+  );
 
   // `outcome` is written from the consume loop; re-read after the race so
   // TypeScript's flow analysis doesn't assume the initializer is still current.
@@ -235,11 +348,21 @@ async function runOnce(
       ? { kind: "cancelled" }
       : raced === "timeout"
         ? { kind: "timeout" }
-        : outcomeBox.current;
+        : raced === "stall"
+          ? {
+              kind: "error",
+              message: `No events received from OpenCode after ${STALL_FAIL_MS / 1000}s — check the LLM proxy URL/allowlist and the container's opencode.json`,
+            }
+          : outcomeBox.current;
+  log(run.id, `outcome: ${finalOutcome.kind}`);
 
   if (finalOutcome.kind !== "idle") {
     // Best-effort abort so the container's generation stops burning tokens.
-    await client.session.abort({ path: { id: sessionId } }).catch(() => undefined);
+    const abortResult = await client
+      .session.abort({ path: { id: sessionId } })
+      .then(() => "ok" as const)
+      .catch((error: unknown) => `failed: ${errorText(error)}`);
+    log(run.id, `session.abort: ${abortResult}`);
     await sleep(300);
   }
   await stream.return?.(undefined).catch(() => undefined);
@@ -249,6 +372,7 @@ async function runOnce(
     finalOutcome.kind === "idle" || finalOutcome.kind === "timeout"
       ? await lastAssistantText(client, sessionId)
       : null;
+  log(run.id, `assistant summary: ${summary === null ? "none" : `${summary.length} chars`}`);
   const clippedSummary =
     summary !== null ? summary.slice(0, MAX_SUMMARY_CHARS) : null;
 
@@ -270,13 +394,16 @@ async function runOnce(
   let prUrl: string | null = null;
   if (status === "SUCCEEDED" && run.repoFullName !== null && clippedSummary !== null) {
     try {
+      log(run.id, "opening pull request via github flow");
       prUrl = await githubFinish(
         ws,
         { id: run.id, userId: run.userId, repoFullName: run.repoFullName, prompt: run.prompt },
         clippedSummary,
       );
+      log(run.id, `pull request: ${prUrl}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      log(run.id, `github flow failed: ${message}`);
       emitter.emit({
         type: "error",
         code: error instanceof GithubFlowError ? "GITHUB_FLOW" : "GITHUB_FLOW",
@@ -316,6 +443,7 @@ async function runOnce(
       },
     })
     .catch(() => undefined);
+  log(run.id, `run finalized: ${status}${errorMessage ? ` (${errorMessage})` : ""}`);
 }
 
 function mapPart(part: Part, throttle: PartThrottle): void {
