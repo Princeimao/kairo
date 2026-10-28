@@ -11,7 +11,7 @@ try {
   // no own .env — fall through to shared file / process env
 }
 const here = dirname(fileURLToPath(import.meta.url));
-const sharedEnv = resolve(here, "..", "..", "..", "api", ".env");
+const sharedEnv = resolve(here, "..", "..", "api", ".env");
 if (existsSync(sharedEnv)) {
   try {
     process.loadEnvFile(sharedEnv);
