@@ -60,6 +60,24 @@ const envSchema = z.object({
   GITHUB_APP_ID: z.coerce.number().int().positive().optional(),
   // Shared secret used to verify `x-hub-signature-256` on webhook deliveries.
   GITHUB_WEBHOOK_SECRET: z.string().min(1).optional(),
+
+  // BullMQ + SSE relay.
+  REDIS_URL: z.string().url().default("redis://127.0.0.1:6379"),
+  // HMAC key: per-container OpenCode server password + LLM proxy token hashing.
+  SANDBOX_SECRET: z.string().min(16).default("kairo-dev-sandbox-secret"),
+
+  // LLM proxy (host-side, in this process).
+  LLM_PROXY_PORT: z.coerce.number().int().positive().default(4100),
+  LLM_PROXY_HOST: z.string().default("0.0.0.0"),
+  // URL a sandbox container uses to reach the proxy (Docker Desktop).
+  LLM_PROXY_BASE_URL: z.string().url().default("http://host.docker.internal:4100"),
+  // OpenAI-compatible upstream for the proxy.
+  NEBIUS_API_KEY: z.string().optional(),
+  NEBIUS_BASE_URL: z.string().url().default("https://api.tokenfactory.nebius.com/v1"),
+  // Comma-separated model ids the proxy will forward.
+  LLM_MODEL_ALLOWLIST: z.string().default("nvidia/nemotron-3.5-super-vl:free"),
+  // Default model OpenCode runs with.
+  OPENCODE_MODEL: z.string().default("nvidia/nemotron-3.5-super-vl:free"),
 });
 
 const parsed = envSchema.safeParse(process.env);

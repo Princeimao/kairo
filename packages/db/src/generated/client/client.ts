@@ -67,6 +67,21 @@ export type GithubEvent = Prisma.GithubEventModel
  */
 export type Sandbox = Prisma.SandboxModel
 /**
+ * Model ChatSession
+ * 
+ */
+export type ChatSession = Prisma.ChatSessionModel
+/**
+ * Model Conversation
+ * 
+ */
+export type Conversation = Prisma.ConversationModel
+/**
+ * Model Message
+ * 
+ */
+export type Message = Prisma.MessageModel
+/**
  * Model AgentRun
  * 
  */

@@ -1,4 +1,4 @@
-﻿import { Writable } from "node:stream";
+import { Writable } from "node:stream";
 import { randomUUID } from "node:crypto";
 import type { WritableStream } from "node:stream/web";
 import {
@@ -7,18 +7,7 @@ import {
   type ContainerInspectResponse,
   type DockerClient as DockerClientInstance,
 } from "@docker/node-sdk";
-import {
-  WorkspaceError,
-  type ExecOptions,
-  type ExecResult,
-  type ListOptions,
-  type ListResult,
-  type ReadResult,
-  type SearchHit,
-  type SearchResult,
-  type Workspace,
-  type WriteResult,
-} from "@kairo/agent";
+import { WorkspaceError } from "./errors.js";
 import { bufferToNodeReadable, packFileTar, unpackFirstFileTar } from "./archive.js";
 import { getContainerArchiveRaw, NotFoundSignal, putContainerArchiveRaw } from "./http-bypass.js";
 import {
@@ -28,26 +17,33 @@ import {
   volumeNameFor,
 } from "./config.js";
 
-const SKIP_DIRS = new Set([
-  ".git",
-  "node_modules",
-  "dist",
-  "build",
-  ".next",
-  "coverage",
-  ".venv",
-  "venv",
-  "__pycache__",
-]);
-
 const INSPECT_POLL_MS = 50;
 const EXIT_POLL_DEADLINE_MS = 5_000;
 const WAIT_EXITED_DEADLINE_MS = 30_000;
-const SEARCH_TIMEOUT_MS = 15_000;
-const LIST_TIMEOUT_MS = 30_000;
-const LIST_MAX_OUTPUT_BYTES = 1_000_000;
-const SEARCH_MAX_OUTPUT_BYTES = 200_000;
 const WORKSPACE_ROOT = "/workspace";
+
+export interface ExecOptions {
+  cwd?: string;
+  timeoutMs?: number;
+  maxOutputBytes?: number;
+}
+
+export interface ExecResult {
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+  truncated: boolean;
+}
+
+export interface ReadResult {
+  content: string;
+  truncated: boolean;
+}
+
+export interface WriteResult {
+  bytes: number;
+}
 
 type ClientDeps = {
   client: DockerClientInstance;
@@ -137,8 +133,7 @@ export interface SandboxStatus {
   image: string;
 }
 
-export class DockerWorkspace implements Workspace {
-  readonly rootLabel = "sandbox";
+export class DockerWorkspace {
   readonly userId: string;
   private readonly containerName: string;
   private readonly volumeName: string;
@@ -411,133 +406,6 @@ export class DockerWorkspace implements Workspace {
       copyUIDGID: "true",
     });
     return { bytes };
-  }
-
-  async listFiles(options?: ListOptions): Promise<ListResult> {
-    const maxEntries = options?.maxEntries ?? 500;
-    const abs = this.resolveSafe(options?.path ?? ".");
-    await this.ensureRunning();
-    const { client } = await this.deps();
-    const prunes = [...SKIP_DIRS].flatMap((name) => ["-name", name, "-o"] as string[]).slice(0, -1);
-    const argv = [
-      "find",
-      abs,
-      "-mindepth",
-      "1",
-      "(",
-      ...prunes,
-      ")",
-      "-prune",
-      "-o",
-      "-printf",
-      "%y\\t%p\\n",
-    ];
-    const raw = await this.execInternal(client, argv, WORKSPACE_ROOT, LIST_TIMEOUT_MS, LIST_MAX_OUTPUT_BYTES);
-    const prefixLength = abs.replace(/\/+$/, "").length + 1;
-    type Parsed = { type: string; rel: string };
-    const parsed: Parsed[] = [];
-    for (const line of raw.stdout.split("\n")) {
-      const tabIndex = line.indexOf("\t");
-      if (tabIndex < 0) continue;
-      const type = line.slice(0, tabIndex);
-      const containerPath = line.slice(tabIndex + 1);
-      if (type !== "d" && type !== "f" && type !== "l") continue;
-      if (!containerPath.startsWith(`${WORKSPACE_ROOT}/`)) continue;
-      parsed.push({ type, rel: containerPath.slice(prefixLength) });
-    }
-    const paths: string[] = [];
-    for (const item of parsed) {
-      if (paths.length >= maxEntries) break;
-      if (item.type === "d") paths.push(`${item.rel}/`);
-      else if (item.type === "l") paths.push(`${item.rel}@`);
-      else paths.push(item.rel);
-    }
-    paths.sort((a, b) => a.localeCompare(b));
-    return { paths, truncated: parsed.length > paths.length };
-  }
-
-  async searchCode(options: {
-    query: string;
-    path?: string;
-    isRegex?: boolean;
-    maxResults?: number;
-  }): Promise<SearchResult> {
-    const query = options.query ?? "";
-    if (query.length === 0) {
-      throw new WorkspaceError("query must not be empty", "INVALID_QUERY");
-    }
-    const abs = this.resolveSafe(options.path ?? ".");
-    await this.ensureRunning();
-    const { client } = await this.deps();
-    const maxResults = options.maxResults ?? 200;
-    const argv = [
-      "rg",
-      "--line-number",
-      "--no-heading",
-      "--color",
-      "never",
-      "--max-count",
-      "5",
-      "--max-columns",
-      "500",
-      options.isRegex === true ? "-e" : "-F",
-      query,
-      abs,
-    ];
-    const raw = await this.execInternal(client, argv, WORKSPACE_ROOT, SEARCH_TIMEOUT_MS, SEARCH_MAX_OUTPUT_BYTES);
-    const hits: SearchHit[] = [];
-    for (const line of raw.stdout.split("\n")) {
-      if (hits.length >= maxResults) break;
-      const match = /^(.*?):(\d+):(.*)$/.exec(line);
-      if (!match) continue;
-      if (!match[1]!.startsWith(`${WORKSPACE_ROOT}/`)) continue;
-      hits.push({
-        path: match[1]!.slice(`${WORKSPACE_ROOT}/`.length),
-        line: Number(match[2]),
-        text: match[3]!.trimEnd(),
-      });
-    }
-    if (hits.length === 0 && (raw.exitCode ?? 0) >= 2) {
-      if (/No such file/i.test(raw.stderr)) {
-        throw new WorkspaceError(`search root does not exist: ${options.path ?? "."}`, "NOT_FOUND");
-      }
-      throw new WorkspaceError(`ripgrep failed: ${raw.stderr.trim().slice(0, 400)}`, "SEARCH_FAILED");
-    }
-    return { hits, truncated: hits.length >= maxResults };
-  }
-
-  /** Internal exec with a fixed timeout kill; argv form, no shell. */
-  private async execInternal(
-    client: DockerClientInstance,
-    argv: string[],
-    cwd: string,
-    timeoutMs: number,
-    maxOutputBytes: number,
-  ): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
-    const exec = await client.containerExec(this.containerName, {
-      Cmd: argv,
-      AttachStdin: false,
-      AttachStdout: true,
-      AttachStderr: true,
-      Tty: false,
-      User: SANDBOX_UID_GID,
-      WorkingDir: cwd,
-    });
-    const execId = exec.Id ?? "";
-    const stdoutCapture = new CaptureWritable(maxOutputBytes);
-    const stderrCapture = new CaptureWritable(maxOutputBytes);
-    const timer = setTimeout(() => {
-      void this.killTimedOutExec(client, execId, "internal command timed out").catch(() => undefined);
-    }, timeoutMs);
-    try {
-      await client.execStart(execId, stdoutCapture, stderrCapture);
-    } catch (error) {
-      if (!isNotFound(error)) throw error;
-    } finally {
-      clearTimeout(timer);
-    }
-    const exitCode = await this.execExitCode(client, execId);
-    return { exitCode, stdout: stdoutCapture.text(), stderr: stderrCapture.text() };
   }
 
   /**

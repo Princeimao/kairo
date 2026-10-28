@@ -2,7 +2,7 @@ import { PassThrough } from "node:stream";
 import type { Readable } from "node:stream";
 import { WritableStream } from "node:stream/web";
 import { pack, extract } from "tar-stream";
-import { WorkspaceError } from "@kairo/agent";
+import { WorkspaceError } from "./errors.js";
 
 const SANDBOX_UID = 1000;
 const SANDBOX_GID = 1000;

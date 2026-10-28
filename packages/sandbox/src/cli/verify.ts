@@ -5,7 +5,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DockerWorkspace } from "../sandbox.js";
-import { WorkspaceError } from "@kairo/agent";
+import { WorkspaceError } from "../errors.js";
 
 const results: Array<{ name: string; ok: boolean; note?: string }> = [];
 
@@ -97,25 +97,6 @@ async function main(): Promise<void> {
   const slow = await ws.exec(["bash", "-c", "sleep 30"], { timeoutMs: 1_500 });
   const elapsed = Date.now() - t1;
   record("exec timeout kill", slow.timedOut && elapsed < 10_000, `${elapsed}ms, exit=${slow.exitCode}`);
-
-  // listFiles
-  const list = await ws.listFiles();
-  const found = ["src/hello.txt", "deep/nested/path/file.md"].every((p) => list.paths.includes(p));
-  record("listFiles includes written files", found, `${list.paths.length} entries`);
-
-  // searchCode
-  const search = await ws.searchCode({ query: "hello sandbox", isRegex: false });
-  record(
-    "searchCode fixed string",
-    search.hits.some((hit) => hit.path === "src/hello.txt"),
-    `${search.hits.length} hits`,
-  );
-  const regex = await ws.searchCode({ query: "^line\\d$", isRegex: true });
-  record(
-    "searchCode regex",
-    regex.hits.some((hit) => hit.line === 2),
-    `${regex.hits.length} hits`,
-  );
 
   // persistence across stop → start
   await ws.stop();

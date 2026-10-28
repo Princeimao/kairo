@@ -218,6 +218,7 @@ export type UserWhereInput = {
   sessions?: Prisma.SessionListRelationFilter
   sandbox?: Prisma.XOR<Prisma.SandboxNullableScalarRelationFilter, Prisma.SandboxWhereInput> | null
   githubEvents?: Prisma.GithubEventListRelationFilter
+  chatSessions?: Prisma.ChatSessionListRelationFilter
 }
 
 export type UserOrderByWithRelationInput = {
@@ -234,6 +235,7 @@ export type UserOrderByWithRelationInput = {
   sessions?: Prisma.SessionOrderByRelationAggregateInput
   sandbox?: Prisma.SandboxOrderByWithRelationInput
   githubEvents?: Prisma.GithubEventOrderByRelationAggregateInput
+  chatSessions?: Prisma.ChatSessionOrderByRelationAggregateInput
 }
 
 export type UserWhereUniqueInput = Prisma.AtLeast<{
@@ -253,6 +255,7 @@ export type UserWhereUniqueInput = Prisma.AtLeast<{
   sessions?: Prisma.SessionListRelationFilter
   sandbox?: Prisma.XOR<Prisma.SandboxNullableScalarRelationFilter, Prisma.SandboxWhereInput> | null
   githubEvents?: Prisma.GithubEventListRelationFilter
+  chatSessions?: Prisma.ChatSessionListRelationFilter
 }, "id" | "githubId">
 
 export type UserOrderByWithAggregationInput = {
@@ -299,6 +302,7 @@ export type UserCreateInput = {
   sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
   sandbox?: Prisma.SandboxCreateNestedOneWithoutUserInput
   githubEvents?: Prisma.GithubEventCreateNestedManyWithoutUserInput
+  chatSessions?: Prisma.ChatSessionCreateNestedManyWithoutUserInput
 }
 
 export type UserUncheckedCreateInput = {
@@ -315,6 +319,7 @@ export type UserUncheckedCreateInput = {
   sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
   sandbox?: Prisma.SandboxUncheckedCreateNestedOneWithoutUserInput
   githubEvents?: Prisma.GithubEventUncheckedCreateNestedManyWithoutUserInput
+  chatSessions?: Prisma.ChatSessionUncheckedCreateNestedManyWithoutUserInput
 }
 
 export type UserUpdateInput = {
@@ -331,6 +336,7 @@ export type UserUpdateInput = {
   sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
   sandbox?: Prisma.SandboxUpdateOneWithoutUserNestedInput
   githubEvents?: Prisma.GithubEventUpdateManyWithoutUserNestedInput
+  chatSessions?: Prisma.ChatSessionUpdateManyWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateInput = {
@@ -347,6 +353,7 @@ export type UserUncheckedUpdateInput = {
   sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
   sandbox?: Prisma.SandboxUncheckedUpdateOneWithoutUserNestedInput
   githubEvents?: Prisma.GithubEventUncheckedUpdateManyWithoutUserNestedInput
+  chatSessions?: Prisma.ChatSessionUncheckedUpdateManyWithoutUserNestedInput
 }
 
 export type UserCreateManyInput = {
@@ -505,6 +512,20 @@ export type UserUpdateOneRequiredWithoutSandboxNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutSandboxInput, Prisma.UserUpdateWithoutSandboxInput>, Prisma.UserUncheckedUpdateWithoutSandboxInput>
 }
 
+export type UserCreateNestedOneWithoutChatSessionsInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutChatSessionsInput, Prisma.UserUncheckedCreateWithoutChatSessionsInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutChatSessionsInput
+  connect?: Prisma.UserWhereUniqueInput
+}
+
+export type UserUpdateOneRequiredWithoutChatSessionsNestedInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutChatSessionsInput, Prisma.UserUncheckedCreateWithoutChatSessionsInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutChatSessionsInput
+  upsert?: Prisma.UserUpsertWithoutChatSessionsInput
+  connect?: Prisma.UserWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutChatSessionsInput, Prisma.UserUpdateWithoutChatSessionsInput>, Prisma.UserUncheckedUpdateWithoutChatSessionsInput>
+}
+
 export type UserCreateWithoutGithubConnectionInput = {
   id?: string
   githubId: string
@@ -518,6 +539,7 @@ export type UserCreateWithoutGithubConnectionInput = {
   sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
   sandbox?: Prisma.SandboxCreateNestedOneWithoutUserInput
   githubEvents?: Prisma.GithubEventCreateNestedManyWithoutUserInput
+  chatSessions?: Prisma.ChatSessionCreateNestedManyWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutGithubConnectionInput = {
@@ -533,6 +555,7 @@ export type UserUncheckedCreateWithoutGithubConnectionInput = {
   sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
   sandbox?: Prisma.SandboxUncheckedCreateNestedOneWithoutUserInput
   githubEvents?: Prisma.GithubEventUncheckedCreateNestedManyWithoutUserInput
+  chatSessions?: Prisma.ChatSessionUncheckedCreateNestedManyWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutGithubConnectionInput = {
@@ -564,6 +587,7 @@ export type UserUpdateWithoutGithubConnectionInput = {
   sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
   sandbox?: Prisma.SandboxUpdateOneWithoutUserNestedInput
   githubEvents?: Prisma.GithubEventUpdateManyWithoutUserNestedInput
+  chatSessions?: Prisma.ChatSessionUpdateManyWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutGithubConnectionInput = {
@@ -579,6 +603,7 @@ export type UserUncheckedUpdateWithoutGithubConnectionInput = {
   sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
   sandbox?: Prisma.SandboxUncheckedUpdateOneWithoutUserNestedInput
   githubEvents?: Prisma.GithubEventUncheckedUpdateManyWithoutUserNestedInput
+  chatSessions?: Prisma.ChatSessionUncheckedUpdateManyWithoutUserNestedInput
 }
 
 export type UserCreateWithoutSessionsInput = {
@@ -594,6 +619,7 @@ export type UserCreateWithoutSessionsInput = {
   githubConnection?: Prisma.GithubConnectionCreateNestedOneWithoutUserInput
   sandbox?: Prisma.SandboxCreateNestedOneWithoutUserInput
   githubEvents?: Prisma.GithubEventCreateNestedManyWithoutUserInput
+  chatSessions?: Prisma.ChatSessionCreateNestedManyWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutSessionsInput = {
@@ -609,6 +635,7 @@ export type UserUncheckedCreateWithoutSessionsInput = {
   githubConnection?: Prisma.GithubConnectionUncheckedCreateNestedOneWithoutUserInput
   sandbox?: Prisma.SandboxUncheckedCreateNestedOneWithoutUserInput
   githubEvents?: Prisma.GithubEventUncheckedCreateNestedManyWithoutUserInput
+  chatSessions?: Prisma.ChatSessionUncheckedCreateNestedManyWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutSessionsInput = {
@@ -640,6 +667,7 @@ export type UserUpdateWithoutSessionsInput = {
   githubConnection?: Prisma.GithubConnectionUpdateOneWithoutUserNestedInput
   sandbox?: Prisma.SandboxUpdateOneWithoutUserNestedInput
   githubEvents?: Prisma.GithubEventUpdateManyWithoutUserNestedInput
+  chatSessions?: Prisma.ChatSessionUpdateManyWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutSessionsInput = {
@@ -655,6 +683,7 @@ export type UserUncheckedUpdateWithoutSessionsInput = {
   githubConnection?: Prisma.GithubConnectionUncheckedUpdateOneWithoutUserNestedInput
   sandbox?: Prisma.SandboxUncheckedUpdateOneWithoutUserNestedInput
   githubEvents?: Prisma.GithubEventUncheckedUpdateManyWithoutUserNestedInput
+  chatSessions?: Prisma.ChatSessionUncheckedUpdateManyWithoutUserNestedInput
 }
 
 export type UserCreateWithoutGithubEventsInput = {
@@ -670,6 +699,7 @@ export type UserCreateWithoutGithubEventsInput = {
   githubConnection?: Prisma.GithubConnectionCreateNestedOneWithoutUserInput
   sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
   sandbox?: Prisma.SandboxCreateNestedOneWithoutUserInput
+  chatSessions?: Prisma.ChatSessionCreateNestedManyWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutGithubEventsInput = {
@@ -685,6 +715,7 @@ export type UserUncheckedCreateWithoutGithubEventsInput = {
   githubConnection?: Prisma.GithubConnectionUncheckedCreateNestedOneWithoutUserInput
   sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
   sandbox?: Prisma.SandboxUncheckedCreateNestedOneWithoutUserInput
+  chatSessions?: Prisma.ChatSessionUncheckedCreateNestedManyWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutGithubEventsInput = {
@@ -716,6 +747,7 @@ export type UserUpdateWithoutGithubEventsInput = {
   githubConnection?: Prisma.GithubConnectionUpdateOneWithoutUserNestedInput
   sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
   sandbox?: Prisma.SandboxUpdateOneWithoutUserNestedInput
+  chatSessions?: Prisma.ChatSessionUpdateManyWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutGithubEventsInput = {
@@ -731,6 +763,7 @@ export type UserUncheckedUpdateWithoutGithubEventsInput = {
   githubConnection?: Prisma.GithubConnectionUncheckedUpdateOneWithoutUserNestedInput
   sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
   sandbox?: Prisma.SandboxUncheckedUpdateOneWithoutUserNestedInput
+  chatSessions?: Prisma.ChatSessionUncheckedUpdateManyWithoutUserNestedInput
 }
 
 export type UserCreateWithoutSandboxInput = {
@@ -746,6 +779,7 @@ export type UserCreateWithoutSandboxInput = {
   githubConnection?: Prisma.GithubConnectionCreateNestedOneWithoutUserInput
   sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
   githubEvents?: Prisma.GithubEventCreateNestedManyWithoutUserInput
+  chatSessions?: Prisma.ChatSessionCreateNestedManyWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutSandboxInput = {
@@ -761,6 +795,7 @@ export type UserUncheckedCreateWithoutSandboxInput = {
   githubConnection?: Prisma.GithubConnectionUncheckedCreateNestedOneWithoutUserInput
   sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
   githubEvents?: Prisma.GithubEventUncheckedCreateNestedManyWithoutUserInput
+  chatSessions?: Prisma.ChatSessionUncheckedCreateNestedManyWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutSandboxInput = {
@@ -792,6 +827,7 @@ export type UserUpdateWithoutSandboxInput = {
   githubConnection?: Prisma.GithubConnectionUpdateOneWithoutUserNestedInput
   sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
   githubEvents?: Prisma.GithubEventUpdateManyWithoutUserNestedInput
+  chatSessions?: Prisma.ChatSessionUpdateManyWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutSandboxInput = {
@@ -807,6 +843,87 @@ export type UserUncheckedUpdateWithoutSandboxInput = {
   githubConnection?: Prisma.GithubConnectionUncheckedUpdateOneWithoutUserNestedInput
   sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
   githubEvents?: Prisma.GithubEventUncheckedUpdateManyWithoutUserNestedInput
+  chatSessions?: Prisma.ChatSessionUncheckedUpdateManyWithoutUserNestedInput
+}
+
+export type UserCreateWithoutChatSessionsInput = {
+  id?: string
+  githubId: string
+  username: string
+  email?: string | null
+  name?: string | null
+  avatarUrl?: string | null
+  onboardingStep?: $Enums.OnboardingStep
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  githubConnection?: Prisma.GithubConnectionCreateNestedOneWithoutUserInput
+  sessions?: Prisma.SessionCreateNestedManyWithoutUserInput
+  sandbox?: Prisma.SandboxCreateNestedOneWithoutUserInput
+  githubEvents?: Prisma.GithubEventCreateNestedManyWithoutUserInput
+}
+
+export type UserUncheckedCreateWithoutChatSessionsInput = {
+  id?: string
+  githubId: string
+  username: string
+  email?: string | null
+  name?: string | null
+  avatarUrl?: string | null
+  onboardingStep?: $Enums.OnboardingStep
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  githubConnection?: Prisma.GithubConnectionUncheckedCreateNestedOneWithoutUserInput
+  sessions?: Prisma.SessionUncheckedCreateNestedManyWithoutUserInput
+  sandbox?: Prisma.SandboxUncheckedCreateNestedOneWithoutUserInput
+  githubEvents?: Prisma.GithubEventUncheckedCreateNestedManyWithoutUserInput
+}
+
+export type UserCreateOrConnectWithoutChatSessionsInput = {
+  where: Prisma.UserWhereUniqueInput
+  create: Prisma.XOR<Prisma.UserCreateWithoutChatSessionsInput, Prisma.UserUncheckedCreateWithoutChatSessionsInput>
+}
+
+export type UserUpsertWithoutChatSessionsInput = {
+  update: Prisma.XOR<Prisma.UserUpdateWithoutChatSessionsInput, Prisma.UserUncheckedUpdateWithoutChatSessionsInput>
+  create: Prisma.XOR<Prisma.UserCreateWithoutChatSessionsInput, Prisma.UserUncheckedCreateWithoutChatSessionsInput>
+  where?: Prisma.UserWhereInput
+}
+
+export type UserUpdateToOneWithWhereWithoutChatSessionsInput = {
+  where?: Prisma.UserWhereInput
+  data: Prisma.XOR<Prisma.UserUpdateWithoutChatSessionsInput, Prisma.UserUncheckedUpdateWithoutChatSessionsInput>
+}
+
+export type UserUpdateWithoutChatSessionsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  githubId?: Prisma.StringFieldUpdateOperationsInput | string
+  username?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  avatarUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  onboardingStep?: Prisma.EnumOnboardingStepFieldUpdateOperationsInput | $Enums.OnboardingStep
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  githubConnection?: Prisma.GithubConnectionUpdateOneWithoutUserNestedInput
+  sessions?: Prisma.SessionUpdateManyWithoutUserNestedInput
+  sandbox?: Prisma.SandboxUpdateOneWithoutUserNestedInput
+  githubEvents?: Prisma.GithubEventUpdateManyWithoutUserNestedInput
+}
+
+export type UserUncheckedUpdateWithoutChatSessionsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  githubId?: Prisma.StringFieldUpdateOperationsInput | string
+  username?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  avatarUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  onboardingStep?: Prisma.EnumOnboardingStepFieldUpdateOperationsInput | $Enums.OnboardingStep
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  githubConnection?: Prisma.GithubConnectionUncheckedUpdateOneWithoutUserNestedInput
+  sessions?: Prisma.SessionUncheckedUpdateManyWithoutUserNestedInput
+  sandbox?: Prisma.SandboxUncheckedUpdateOneWithoutUserNestedInput
+  githubEvents?: Prisma.GithubEventUncheckedUpdateManyWithoutUserNestedInput
 }
 
 
@@ -817,11 +934,13 @@ export type UserUncheckedUpdateWithoutSandboxInput = {
 export type UserCountOutputType = {
   sessions: number
   githubEvents: number
+  chatSessions: number
 }
 
 export type UserCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   sessions?: boolean | UserCountOutputTypeCountSessionsArgs
   githubEvents?: boolean | UserCountOutputTypeCountGithubEventsArgs
+  chatSessions?: boolean | UserCountOutputTypeCountChatSessionsArgs
 }
 
 /**
@@ -848,6 +967,13 @@ export type UserCountOutputTypeCountGithubEventsArgs<ExtArgs extends runtime.Typ
   where?: Prisma.GithubEventWhereInput
 }
 
+/**
+ * UserCountOutputType without action
+ */
+export type UserCountOutputTypeCountChatSessionsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.ChatSessionWhereInput
+}
+
 
 export type UserSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
@@ -863,6 +989,7 @@ export type UserSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = r
   sessions?: boolean | Prisma.User$sessionsArgs<ExtArgs>
   sandbox?: boolean | Prisma.User$sandboxArgs<ExtArgs>
   githubEvents?: boolean | Prisma.User$githubEventsArgs<ExtArgs>
+  chatSessions?: boolean | Prisma.User$chatSessionsArgs<ExtArgs>
   _count?: boolean | Prisma.UserCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["user"]>
 
@@ -908,6 +1035,7 @@ export type UserInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
   sessions?: boolean | Prisma.User$sessionsArgs<ExtArgs>
   sandbox?: boolean | Prisma.User$sandboxArgs<ExtArgs>
   githubEvents?: boolean | Prisma.User$githubEventsArgs<ExtArgs>
+  chatSessions?: boolean | Prisma.User$chatSessionsArgs<ExtArgs>
   _count?: boolean | Prisma.UserCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type UserIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {}
@@ -920,6 +1048,7 @@ export type $UserPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
     sessions: Prisma.$SessionPayload<ExtArgs>[]
     sandbox: Prisma.$SandboxPayload<ExtArgs> | null
     githubEvents: Prisma.$GithubEventPayload<ExtArgs>[]
+    chatSessions: Prisma.$ChatSessionPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1329,6 +1458,7 @@ export interface Prisma__UserClient<T, Null = never, ExtArgs extends runtime.Typ
   sessions<T extends Prisma.User$sessionsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$sessionsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$SessionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   sandbox<T extends Prisma.User$sandboxArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$sandboxArgs<ExtArgs>>): Prisma.Prisma__SandboxClient<runtime.Types.Result.GetResult<Prisma.$SandboxPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   githubEvents<T extends Prisma.User$githubEventsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$githubEventsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$GithubEventPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  chatSessions<T extends Prisma.User$chatSessionsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$chatSessionsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ChatSessionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1843,6 +1973,30 @@ export type User$githubEventsArgs<ExtArgs extends runtime.Types.Extensions.Inter
   take?: number
   skip?: number
   distinct?: Prisma.GithubEventScalarFieldEnum | Prisma.GithubEventScalarFieldEnum[]
+}
+
+/**
+ * User.chatSessions
+ */
+export type User$chatSessionsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the ChatSession
+   */
+  select?: Prisma.ChatSessionSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the ChatSession
+   */
+  omit?: Prisma.ChatSessionOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.ChatSessionInclude<ExtArgs> | null
+  where?: Prisma.ChatSessionWhereInput
+  orderBy?: Prisma.ChatSessionOrderByWithRelationInput | Prisma.ChatSessionOrderByWithRelationInput[]
+  cursor?: Prisma.ChatSessionWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.ChatSessionScalarFieldEnum | Prisma.ChatSessionScalarFieldEnum[]
 }
 
 /**

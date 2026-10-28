@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { WorkspaceError } from "@kairo/agent";
+import { WorkspaceError } from "./errors.js";
 
 const MB = 1024 * 1024;
 

@@ -1,18 +1,16 @@
 import { Router, type Request } from "express";
 import { z } from "zod";
 import { prisma } from "@kairo/db";
-import { DockerWorkspace } from "@kairo/sandbox";
-import type { AgentEvent } from "@kairo/agent";
 import { AppError } from "../middleware/error-handler.js";
 import { requireAuth } from "../middleware/auth.js";
-import { startRun } from "../lib/runs/executor.js";
-import { RunRegistry } from "../lib/runs/registry.js";
-
-const registry = new RunRegistry();
+import { startRun } from "../lib/sessions.js";
+import { requestRunCancel, subscribeRunEvents } from "../lib/relay.js";
+import type { RunEvent } from "@kairo/run-queue";
 
 export const runRouter = Router();
 
 const heartbeatsMs = 15_000;
+const watchdogMs = 4_000;
 
 function authenticatedUser(req: Request): string {
   const id = req.auth?.user.id;
@@ -42,6 +40,12 @@ function serializeRun(row: {
   status: string;
   mode: string;
   prompt: string;
+  conversationId: string | null;
+  repoFullName: string | null;
+  prUrl: string | null;
+  errorMessage: string | null;
+  tokensIn: number;
+  tokensOut: number;
   createdAt: Date;
   finishedAt: Date | null;
 }) {
@@ -50,6 +54,12 @@ function serializeRun(row: {
     status: row.status,
     mode: row.mode,
     prompt: row.prompt,
+    conversationId: row.conversationId,
+    repoFullName: row.repoFullName,
+    prUrl: row.prUrl,
+    errorMessage: row.errorMessage,
+    tokensIn: row.tokensIn,
+    tokensOut: row.tokensOut,
     createdAt: row.createdAt.toISOString(),
     finishedAt: row.finishedAt?.toISOString() ?? null,
   };
@@ -67,81 +77,19 @@ async function loadOwnedRun(runId: string, userId: string) {
   return run;
 }
 
-function sendEvent(
-  res: { write(chunk: string): boolean },
-  seq: number,
-  event: AgentEvent,
-): void {
-  res.write(`id: ${seq}\ndata: ${JSON.stringify(event)}\n\n`);
-}
-
-function streamFromChannel(
-  channel: NonNullable<ReturnType<RunRegistry["get"]>>,
-  res: { write(chunk: string): boolean; end(cb?: () => void): void },
-  req: Request,
-  initialCursor: number,
-): void {
-  let cursor = initialCursor;
-  let disconnected = false;
-
-  const finish = (): void => {
-    if (disconnected) return;
-    disconnected = true;
-    res.end();
-  };
-
-  req.on("close", () => {
-    disconnected = true;
-  });
-  const heartbeat = setInterval(() => {
-    if (disconnected) return;
-    res.write(`: keepalive\n\n`);
-  }, heartbeatsMs);
-
-  const drain = async (): Promise<void> => {
-    try {
-      for (;;) {
-        if (disconnected) return;
-        const upcoming = channel.events[cursor];
-        if (upcoming) {
-          sendEvent(res, upcoming.seq, upcoming.event);
-          cursor = upcoming.seq;
-          continue;
-        }
-        if (channel.closed && cursor >= channel.events.length) {
-          finish();
-          return;
-        }
-        // Wait for the next push or until the keepalive interval fires.
-        await new Promise<void>((resolveWait) => {
-          let woken = false;
-          const timer = setTimeout(() => {
-            if (woken) return;
-            woken = true;
-            resolveWait();
-          }, heartbeatsMs);
-          channel.waiters.push(() => {
-            if (woken) return;
-            woken = true;
-            clearTimeout(timer);
-            resolveWait();
-          });
-        });
-      }
-    } finally {
-      clearInterval(heartbeat);
-      if (!disconnected) finish();
-    }
-  };
-  void drain();
-}
-
+/**
+ * POST /runs — queue-first: row + USER message + BullMQ job. Same body shape
+ * as before ({prompt, mode}) plus optional conversationId to continue a thread.
+ */
 runRouter.post("/", requireAuth, async (req, res, next) => {
   try {
     const body = z
       .object({
         prompt: z.string().trim().min(3, "prompt is too short").max(8_000),
         mode: z.enum(["CREATE", "FIX"]).optional().default("CREATE"),
+        conversationId: z.string().trim().min(1).optional(),
+        sessionId: z.string().trim().min(1).optional(),
+        repoFullName: z.string().trim().max(200).optional(),
       })
       .safeParse(req.body);
     if (!body.success) {
@@ -150,25 +98,15 @@ runRouter.post("/", requireAuth, async (req, res, next) => {
         `Invalid request: ${body.error.issues[0]?.message ?? "bad body"}`,
       );
     }
-
-    const userId = authenticatedUser(req);
-    const active = registry.activeRunIdFor(userId);
-    if (active) {
-      throw new AppError(409, `Another run is already in progress (${active})`);
-    }
-
-    const run = await prisma.agentRun.create({
-      data: {
-        userId,
-        prompt: body.data.prompt,
-        mode: body.data.mode,
-        status: "RUNNING",
-      },
+    const started = await startRun({
+      userId: authenticatedUser(req),
+      prompt: body.data.prompt,
+      mode: body.data.mode,
+      conversationId: body.data.conversationId,
+      sessionId: body.data.sessionId,
+      repoFullName: body.data.repoFullName,
     });
-    registry.open(run.id, userId);
-    const workspace = new DockerWorkspace(userId);
-    startRun(registry, run.id, userId, body.data.prompt, workspace);
-    res.status(202).json({ runId: run.id, status: "RUNNING" });
+    res.status(202).json({ ...started, status: "QUEUED" });
   } catch (err) {
     next(err);
   }
@@ -208,27 +146,30 @@ runRouter.post("/:id/cancel", requireAuth, async (req, res, next) => {
       runIdFromParams(req),
       authenticatedUser(req),
     );
-    const channel = registry.get(run.id);
-    if (channel) {
-      registry.cancel(run.id);
-      res.json({ ok: true, cancelling: true });
-      return;
-    }
-    if (!isTerminalStatus(run.status)) {
-      // No channel means the API process restarted mid-run: finalize here.
-      await prisma.agentRun.update({
-        where: { id: run.id },
-        data: { status: "CANCELLED", finishedAt: new Date() },
-      });
+    if (isTerminalStatus(run.status)) {
       res.json({ ok: true, cancelled: true });
       return;
     }
-    res.json({ ok: true, cancelled: true });
+    await requestRunCancel(run.id);
+    if (run.status === "QUEUED") {
+      // No worker picked it up yet — finalize now; a worker that starts later
+      // sees the terminal status (and the cancel key) and drops the job.
+      await prisma.agentRun.updateMany({
+        where: { id: run.id, status: "QUEUED" },
+        data: { status: "CANCELLED", finishedAt: new Date() },
+      });
+    }
+    res.json({ ok: true, cancelling: true });
   } catch (err) {
     next(err);
   }
 });
 
+/**
+ * GET /runs/:id/events — SSE: replay persisted steps after the cursor, then
+ * relay live Redis events from the worker. `id:` lines are step seq numbers,
+ * so Last-Event-ID reconnects replay exactly what was missed.
+ */
 runRouter.get("/:id/events", requireAuth, async (req, res, next) => {
   try {
     const run = await loadOwnedRun(
@@ -243,47 +184,115 @@ runRouter.get("/:id/events", requireAuth, async (req, res, next) => {
       "x-accel-buffering": "no",
     });
     res.write(`retry: 2000\n\n`);
-    const channel = registry.get(run.id);
-    if (channel) {
-      streamFromChannel(channel, res, req, cursor);
-      return;
-    }
-    const steps = await prisma.agentStep.findMany({
-      where: { runId: run.id, seq: { gt: cursor } },
-      orderBy: { seq: "asc" },
-    });
+
+    let closed = false;
     let lastSeq = cursor;
-    for (const step of steps) {
-      lastSeq = step.seq;
-      sendEvent(res, step.seq, step.payload as AgentEvent);
-    }
-    if (
-      isTerminalStatus(run.status) ||
-      steps.some((step) => step.type === "done")
-    ) {
+    const clearTimers: Array<() => void> = [];
+    const unsubscribeHolder: { fn?: () => void } = {};
+
+    const finish = (): void => {
+      if (closed) return;
+      closed = true;
+      for (const clear of clearTimers.splice(0)) clear();
+      unsubscribeHolder.fn?.();
       res.end();
-      return;
-    }
-    const synthetic: AgentEvent = {
-      type: "done",
-      status: "FAILED",
-      summary:
-        "Run was interrupted when the API server restarted. Start a new run.",
-      steps: 0,
-      durationMs: 0,
-      error: {
-        code: "SERVER_RESTARTED",
-        message: "Run was interrupted by a server restart.",
-      },
     };
-    await prisma.agentRun
-      .update({
-        where: { id: run.id },
-        data: { status: "FAILED", finishedAt: new Date() },
-      })
-      .catch(() => undefined);
-    sendEvent(res, lastSeq + 1, synthetic);
-    res.end();
+    req.on("close", () => {
+      closed = true;
+      for (const clear of clearTimers.splice(0)) clear();
+      unsubscribeHolder.fn?.();
+    });
+
+    const send = (seq: number, event: RunEvent): void => {
+      if (closed || seq <= lastSeq) return;
+      lastSeq = seq;
+      res.write(`id: ${seq}\ndata: ${JSON.stringify(event)}\n\n`);
+    };
+
+    const heartbeat = setInterval(() => {
+      if (!closed) res.write(`: keepalive\n\n`);
+    }, heartbeatsMs);
+    clearTimers.push(() => clearInterval(heartbeat));
+
+    const handleStep = (step: { seq: number; event: RunEvent }): void => {
+      if (closed || step.seq <= lastSeq) return;
+      send(step.seq, step.event);
+      if (step.event.type === "done") finish();
+    };
+
+    // Subscribe before replay so nothing published in between is lost.
+    const buffer: Array<{ seq: number; event: RunEvent }> = [];
+    let replaying = true;
+    unsubscribeHolder.fn = subscribeRunEvents(run.id, (step) => {
+      if (replaying) buffer.push(step);
+      else handleStep(step);
+    });
+
+    try {
+      const steps = await prisma.agentStep.findMany({
+        where: { runId: run.id, seq: { gt: cursor } },
+        orderBy: { seq: "asc" },
+      });
+      let sawDone = false;
+      for (const step of steps) {
+        const event = step.payload as RunEvent;
+        if (step.seq > lastSeq) {
+          lastSeq = step.seq;
+          res.write(`id: ${step.seq}\ndata: ${JSON.stringify(event)}\n\n`);
+        }
+        if (step.type === "done" || event.type === "done") sawDone = true;
+      }
+      replaying = false;
+      for (const buffered of buffer.splice(0)) handleStep(buffered);
+      if (sawDone || closed) {
+        finish();
+        return;
+      }
+
+      const syntheticDone = (status: string, summary: string): RunEvent => ({
+        type: "done",
+        status: (isTerminalStatus(status) ? status : "FAILED") as
+          | "SUCCEEDED"
+          | "FAILED"
+          | "CANCELLED",
+        summary,
+      });
+
+      if (isTerminalStatus(run.status)) {
+        send(lastSeq + 1, syntheticDone(run.status, run.errorMessage ?? "Run finished."));
+        finish();
+        return;
+      }
+
+      // Live phase: if the worker dies without publishing done (crash,
+      // restart), the DB status still flips — watchdog converts that into a
+      // terminal event so the stream always ends.
+      const watchdog = setInterval(() => {
+        if (closed) return;
+        void prisma.agentRun
+          .findUnique({
+            where: { id: run.id },
+            select: { status: true, errorMessage: true },
+          })
+          .then((fresh) => {
+            if (!fresh || closed) return;
+            if (isTerminalStatus(fresh.status)) {
+              send(
+                lastSeq + 1,
+                syntheticDone(
+                  fresh.status,
+                  fresh.errorMessage ?? "Run finished.",
+                ),
+              );
+              finish();
+            }
+          })
+          .catch(() => undefined);
+      }, watchdogMs);
+      clearTimers.push(() => clearInterval(watchdog));
+    } catch {
+      finish();
+    }
   } catch (err) {
     next(err);
   }

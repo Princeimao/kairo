@@ -20,8 +20,20 @@ export type AgentRunModel = runtime.Types.Result.DefaultSelection<Prisma.$AgentR
 
 export type AggregateAgentRun = {
   _count: AgentRunCountAggregateOutputType | null
+  _avg: AgentRunAvgAggregateOutputType | null
+  _sum: AgentRunSumAggregateOutputType | null
   _min: AgentRunMinAggregateOutputType | null
   _max: AgentRunMaxAggregateOutputType | null
+}
+
+export type AgentRunAvgAggregateOutputType = {
+  tokensIn: number | null
+  tokensOut: number | null
+}
+
+export type AgentRunSumAggregateOutputType = {
+  tokensIn: number | null
+  tokensOut: number | null
 }
 
 export type AgentRunMinAggregateOutputType = {
@@ -30,9 +42,13 @@ export type AgentRunMinAggregateOutputType = {
   mode: $Enums.AgentRunMode | null
   prompt: string | null
   status: $Enums.AgentRunStatus | null
+  conversationId: string | null
   repoFullName: string | null
   branch: string | null
   prUrl: string | null
+  tokensIn: number | null
+  tokensOut: number | null
+  errorMessage: string | null
   createdAt: Date | null
   finishedAt: Date | null
 }
@@ -43,9 +59,13 @@ export type AgentRunMaxAggregateOutputType = {
   mode: $Enums.AgentRunMode | null
   prompt: string | null
   status: $Enums.AgentRunStatus | null
+  conversationId: string | null
   repoFullName: string | null
   branch: string | null
   prUrl: string | null
+  tokensIn: number | null
+  tokensOut: number | null
+  errorMessage: string | null
   createdAt: Date | null
   finishedAt: Date | null
 }
@@ -56,14 +76,28 @@ export type AgentRunCountAggregateOutputType = {
   mode: number
   prompt: number
   status: number
+  conversationId: number
   repoFullName: number
   branch: number
   prUrl: number
+  tokensIn: number
+  tokensOut: number
+  errorMessage: number
   createdAt: number
   finishedAt: number
   _all: number
 }
 
+
+export type AgentRunAvgAggregateInputType = {
+  tokensIn?: true
+  tokensOut?: true
+}
+
+export type AgentRunSumAggregateInputType = {
+  tokensIn?: true
+  tokensOut?: true
+}
 
 export type AgentRunMinAggregateInputType = {
   id?: true
@@ -71,9 +105,13 @@ export type AgentRunMinAggregateInputType = {
   mode?: true
   prompt?: true
   status?: true
+  conversationId?: true
   repoFullName?: true
   branch?: true
   prUrl?: true
+  tokensIn?: true
+  tokensOut?: true
+  errorMessage?: true
   createdAt?: true
   finishedAt?: true
 }
@@ -84,9 +122,13 @@ export type AgentRunMaxAggregateInputType = {
   mode?: true
   prompt?: true
   status?: true
+  conversationId?: true
   repoFullName?: true
   branch?: true
   prUrl?: true
+  tokensIn?: true
+  tokensOut?: true
+  errorMessage?: true
   createdAt?: true
   finishedAt?: true
 }
@@ -97,9 +139,13 @@ export type AgentRunCountAggregateInputType = {
   mode?: true
   prompt?: true
   status?: true
+  conversationId?: true
   repoFullName?: true
   branch?: true
   prUrl?: true
+  tokensIn?: true
+  tokensOut?: true
+  errorMessage?: true
   createdAt?: true
   finishedAt?: true
   _all?: true
@@ -143,6 +189,18 @@ export type AgentRunAggregateArgs<ExtArgs extends runtime.Types.Extensions.Inter
   /**
    * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
    * 
+   * Select which fields to average
+  **/
+  _avg?: AgentRunAvgAggregateInputType
+  /**
+   * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+   * 
+   * Select which fields to sum
+  **/
+  _sum?: AgentRunSumAggregateInputType
+  /**
+   * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+   * 
    * Select which fields to find the minimum value
   **/
   _min?: AgentRunMinAggregateInputType
@@ -173,6 +231,8 @@ export type AgentRunGroupByArgs<ExtArgs extends runtime.Types.Extensions.Interna
   take?: number
   skip?: number
   _count?: AgentRunCountAggregateInputType | true
+  _avg?: AgentRunAvgAggregateInputType
+  _sum?: AgentRunSumAggregateInputType
   _min?: AgentRunMinAggregateInputType
   _max?: AgentRunMaxAggregateInputType
 }
@@ -183,12 +243,18 @@ export type AgentRunGroupByOutputType = {
   mode: $Enums.AgentRunMode
   prompt: string
   status: $Enums.AgentRunStatus
+  conversationId: string | null
   repoFullName: string | null
   branch: string | null
   prUrl: string | null
+  tokensIn: number
+  tokensOut: number
+  errorMessage: string | null
   createdAt: Date
   finishedAt: Date | null
   _count: AgentRunCountAggregateOutputType | null
+  _avg: AgentRunAvgAggregateOutputType | null
+  _sum: AgentRunSumAggregateOutputType | null
   _min: AgentRunMinAggregateOutputType | null
   _max: AgentRunMaxAggregateOutputType | null
 }
@@ -217,11 +283,16 @@ export type AgentRunWhereInput = {
   mode?: Prisma.EnumAgentRunModeFilter<"AgentRun"> | $Enums.AgentRunMode
   prompt?: Prisma.StringFilter<"AgentRun"> | string
   status?: Prisma.EnumAgentRunStatusFilter<"AgentRun"> | $Enums.AgentRunStatus
+  conversationId?: Prisma.StringNullableFilter<"AgentRun"> | string | null
   repoFullName?: Prisma.StringNullableFilter<"AgentRun"> | string | null
   branch?: Prisma.StringNullableFilter<"AgentRun"> | string | null
   prUrl?: Prisma.StringNullableFilter<"AgentRun"> | string | null
+  tokensIn?: Prisma.IntFilter<"AgentRun"> | number
+  tokensOut?: Prisma.IntFilter<"AgentRun"> | number
+  errorMessage?: Prisma.StringNullableFilter<"AgentRun"> | string | null
   createdAt?: Prisma.DateTimeFilter<"AgentRun"> | Date | string
   finishedAt?: Prisma.DateTimeNullableFilter<"AgentRun"> | Date | string | null
+  conversation?: Prisma.XOR<Prisma.ConversationNullableScalarRelationFilter, Prisma.ConversationWhereInput> | null
   steps?: Prisma.AgentStepListRelationFilter
 }
 
@@ -231,11 +302,16 @@ export type AgentRunOrderByWithRelationInput = {
   mode?: Prisma.SortOrder
   prompt?: Prisma.SortOrder
   status?: Prisma.SortOrder
+  conversationId?: Prisma.SortOrderInput | Prisma.SortOrder
   repoFullName?: Prisma.SortOrderInput | Prisma.SortOrder
   branch?: Prisma.SortOrderInput | Prisma.SortOrder
   prUrl?: Prisma.SortOrderInput | Prisma.SortOrder
+  tokensIn?: Prisma.SortOrder
+  tokensOut?: Prisma.SortOrder
+  errorMessage?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   finishedAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  conversation?: Prisma.ConversationOrderByWithRelationInput
   steps?: Prisma.AgentStepOrderByRelationAggregateInput
 }
 
@@ -248,11 +324,16 @@ export type AgentRunWhereUniqueInput = Prisma.AtLeast<{
   mode?: Prisma.EnumAgentRunModeFilter<"AgentRun"> | $Enums.AgentRunMode
   prompt?: Prisma.StringFilter<"AgentRun"> | string
   status?: Prisma.EnumAgentRunStatusFilter<"AgentRun"> | $Enums.AgentRunStatus
+  conversationId?: Prisma.StringNullableFilter<"AgentRun"> | string | null
   repoFullName?: Prisma.StringNullableFilter<"AgentRun"> | string | null
   branch?: Prisma.StringNullableFilter<"AgentRun"> | string | null
   prUrl?: Prisma.StringNullableFilter<"AgentRun"> | string | null
+  tokensIn?: Prisma.IntFilter<"AgentRun"> | number
+  tokensOut?: Prisma.IntFilter<"AgentRun"> | number
+  errorMessage?: Prisma.StringNullableFilter<"AgentRun"> | string | null
   createdAt?: Prisma.DateTimeFilter<"AgentRun"> | Date | string
   finishedAt?: Prisma.DateTimeNullableFilter<"AgentRun"> | Date | string | null
+  conversation?: Prisma.XOR<Prisma.ConversationNullableScalarRelationFilter, Prisma.ConversationWhereInput> | null
   steps?: Prisma.AgentStepListRelationFilter
 }, "id">
 
@@ -262,14 +343,20 @@ export type AgentRunOrderByWithAggregationInput = {
   mode?: Prisma.SortOrder
   prompt?: Prisma.SortOrder
   status?: Prisma.SortOrder
+  conversationId?: Prisma.SortOrderInput | Prisma.SortOrder
   repoFullName?: Prisma.SortOrderInput | Prisma.SortOrder
   branch?: Prisma.SortOrderInput | Prisma.SortOrder
   prUrl?: Prisma.SortOrderInput | Prisma.SortOrder
+  tokensIn?: Prisma.SortOrder
+  tokensOut?: Prisma.SortOrder
+  errorMessage?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   finishedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   _count?: Prisma.AgentRunCountOrderByAggregateInput
+  _avg?: Prisma.AgentRunAvgOrderByAggregateInput
   _max?: Prisma.AgentRunMaxOrderByAggregateInput
   _min?: Prisma.AgentRunMinOrderByAggregateInput
+  _sum?: Prisma.AgentRunSumOrderByAggregateInput
 }
 
 export type AgentRunScalarWhereWithAggregatesInput = {
@@ -281,9 +368,13 @@ export type AgentRunScalarWhereWithAggregatesInput = {
   mode?: Prisma.EnumAgentRunModeWithAggregatesFilter<"AgentRun"> | $Enums.AgentRunMode
   prompt?: Prisma.StringWithAggregatesFilter<"AgentRun"> | string
   status?: Prisma.EnumAgentRunStatusWithAggregatesFilter<"AgentRun"> | $Enums.AgentRunStatus
+  conversationId?: Prisma.StringNullableWithAggregatesFilter<"AgentRun"> | string | null
   repoFullName?: Prisma.StringNullableWithAggregatesFilter<"AgentRun"> | string | null
   branch?: Prisma.StringNullableWithAggregatesFilter<"AgentRun"> | string | null
   prUrl?: Prisma.StringNullableWithAggregatesFilter<"AgentRun"> | string | null
+  tokensIn?: Prisma.IntWithAggregatesFilter<"AgentRun"> | number
+  tokensOut?: Prisma.IntWithAggregatesFilter<"AgentRun"> | number
+  errorMessage?: Prisma.StringNullableWithAggregatesFilter<"AgentRun"> | string | null
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"AgentRun"> | Date | string
   finishedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"AgentRun"> | Date | string | null
 }
@@ -297,8 +388,12 @@ export type AgentRunCreateInput = {
   repoFullName?: string | null
   branch?: string | null
   prUrl?: string | null
+  tokensIn?: number
+  tokensOut?: number
+  errorMessage?: string | null
   createdAt?: Date | string
   finishedAt?: Date | string | null
+  conversation?: Prisma.ConversationCreateNestedOneWithoutRunsInput
   steps?: Prisma.AgentStepCreateNestedManyWithoutRunInput
 }
 
@@ -308,9 +403,13 @@ export type AgentRunUncheckedCreateInput = {
   mode: $Enums.AgentRunMode
   prompt: string
   status?: $Enums.AgentRunStatus
+  conversationId?: string | null
   repoFullName?: string | null
   branch?: string | null
   prUrl?: string | null
+  tokensIn?: number
+  tokensOut?: number
+  errorMessage?: string | null
   createdAt?: Date | string
   finishedAt?: Date | string | null
   steps?: Prisma.AgentStepUncheckedCreateNestedManyWithoutRunInput
@@ -325,8 +424,12 @@ export type AgentRunUpdateInput = {
   repoFullName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   branch?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  tokensIn?: Prisma.IntFieldUpdateOperationsInput | number
+  tokensOut?: Prisma.IntFieldUpdateOperationsInput | number
+  errorMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   finishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  conversation?: Prisma.ConversationUpdateOneWithoutRunsNestedInput
   steps?: Prisma.AgentStepUpdateManyWithoutRunNestedInput
 }
 
@@ -336,9 +439,13 @@ export type AgentRunUncheckedUpdateInput = {
   mode?: Prisma.EnumAgentRunModeFieldUpdateOperationsInput | $Enums.AgentRunMode
   prompt?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus
+  conversationId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   repoFullName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   branch?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  tokensIn?: Prisma.IntFieldUpdateOperationsInput | number
+  tokensOut?: Prisma.IntFieldUpdateOperationsInput | number
+  errorMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   finishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   steps?: Prisma.AgentStepUncheckedUpdateManyWithoutRunNestedInput
@@ -350,9 +457,13 @@ export type AgentRunCreateManyInput = {
   mode: $Enums.AgentRunMode
   prompt: string
   status?: $Enums.AgentRunStatus
+  conversationId?: string | null
   repoFullName?: string | null
   branch?: string | null
   prUrl?: string | null
+  tokensIn?: number
+  tokensOut?: number
+  errorMessage?: string | null
   createdAt?: Date | string
   finishedAt?: Date | string | null
 }
@@ -366,6 +477,9 @@ export type AgentRunUpdateManyMutationInput = {
   repoFullName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   branch?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  tokensIn?: Prisma.IntFieldUpdateOperationsInput | number
+  tokensOut?: Prisma.IntFieldUpdateOperationsInput | number
+  errorMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   finishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
 }
@@ -376,11 +490,25 @@ export type AgentRunUncheckedUpdateManyInput = {
   mode?: Prisma.EnumAgentRunModeFieldUpdateOperationsInput | $Enums.AgentRunMode
   prompt?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus
+  conversationId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   repoFullName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   branch?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  tokensIn?: Prisma.IntFieldUpdateOperationsInput | number
+  tokensOut?: Prisma.IntFieldUpdateOperationsInput | number
+  errorMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   finishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+}
+
+export type AgentRunListRelationFilter = {
+  every?: Prisma.AgentRunWhereInput
+  some?: Prisma.AgentRunWhereInput
+  none?: Prisma.AgentRunWhereInput
+}
+
+export type AgentRunOrderByRelationAggregateInput = {
+  _count?: Prisma.SortOrder
 }
 
 export type AgentRunCountOrderByAggregateInput = {
@@ -389,11 +517,20 @@ export type AgentRunCountOrderByAggregateInput = {
   mode?: Prisma.SortOrder
   prompt?: Prisma.SortOrder
   status?: Prisma.SortOrder
+  conversationId?: Prisma.SortOrder
   repoFullName?: Prisma.SortOrder
   branch?: Prisma.SortOrder
   prUrl?: Prisma.SortOrder
+  tokensIn?: Prisma.SortOrder
+  tokensOut?: Prisma.SortOrder
+  errorMessage?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   finishedAt?: Prisma.SortOrder
+}
+
+export type AgentRunAvgOrderByAggregateInput = {
+  tokensIn?: Prisma.SortOrder
+  tokensOut?: Prisma.SortOrder
 }
 
 export type AgentRunMaxOrderByAggregateInput = {
@@ -402,9 +539,13 @@ export type AgentRunMaxOrderByAggregateInput = {
   mode?: Prisma.SortOrder
   prompt?: Prisma.SortOrder
   status?: Prisma.SortOrder
+  conversationId?: Prisma.SortOrder
   repoFullName?: Prisma.SortOrder
   branch?: Prisma.SortOrder
   prUrl?: Prisma.SortOrder
+  tokensIn?: Prisma.SortOrder
+  tokensOut?: Prisma.SortOrder
+  errorMessage?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   finishedAt?: Prisma.SortOrder
 }
@@ -415,11 +556,20 @@ export type AgentRunMinOrderByAggregateInput = {
   mode?: Prisma.SortOrder
   prompt?: Prisma.SortOrder
   status?: Prisma.SortOrder
+  conversationId?: Prisma.SortOrder
   repoFullName?: Prisma.SortOrder
   branch?: Prisma.SortOrder
   prUrl?: Prisma.SortOrder
+  tokensIn?: Prisma.SortOrder
+  tokensOut?: Prisma.SortOrder
+  errorMessage?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   finishedAt?: Prisma.SortOrder
+}
+
+export type AgentRunSumOrderByAggregateInput = {
+  tokensIn?: Prisma.SortOrder
+  tokensOut?: Prisma.SortOrder
 }
 
 export type AgentRunScalarRelationFilter = {
@@ -427,12 +577,58 @@ export type AgentRunScalarRelationFilter = {
   isNot?: Prisma.AgentRunWhereInput
 }
 
-export type EnumAgentRunModeFieldUpdateOperationsInput = {
-  set?: $Enums.AgentRunMode
+export type AgentRunCreateNestedManyWithoutConversationInput = {
+  create?: Prisma.XOR<Prisma.AgentRunCreateWithoutConversationInput, Prisma.AgentRunUncheckedCreateWithoutConversationInput> | Prisma.AgentRunCreateWithoutConversationInput[] | Prisma.AgentRunUncheckedCreateWithoutConversationInput[]
+  connectOrCreate?: Prisma.AgentRunCreateOrConnectWithoutConversationInput | Prisma.AgentRunCreateOrConnectWithoutConversationInput[]
+  createMany?: Prisma.AgentRunCreateManyConversationInputEnvelope
+  connect?: Prisma.AgentRunWhereUniqueInput | Prisma.AgentRunWhereUniqueInput[]
+}
+
+export type AgentRunUncheckedCreateNestedManyWithoutConversationInput = {
+  create?: Prisma.XOR<Prisma.AgentRunCreateWithoutConversationInput, Prisma.AgentRunUncheckedCreateWithoutConversationInput> | Prisma.AgentRunCreateWithoutConversationInput[] | Prisma.AgentRunUncheckedCreateWithoutConversationInput[]
+  connectOrCreate?: Prisma.AgentRunCreateOrConnectWithoutConversationInput | Prisma.AgentRunCreateOrConnectWithoutConversationInput[]
+  createMany?: Prisma.AgentRunCreateManyConversationInputEnvelope
+  connect?: Prisma.AgentRunWhereUniqueInput | Prisma.AgentRunWhereUniqueInput[]
+}
+
+export type AgentRunUpdateManyWithoutConversationNestedInput = {
+  create?: Prisma.XOR<Prisma.AgentRunCreateWithoutConversationInput, Prisma.AgentRunUncheckedCreateWithoutConversationInput> | Prisma.AgentRunCreateWithoutConversationInput[] | Prisma.AgentRunUncheckedCreateWithoutConversationInput[]
+  connectOrCreate?: Prisma.AgentRunCreateOrConnectWithoutConversationInput | Prisma.AgentRunCreateOrConnectWithoutConversationInput[]
+  upsert?: Prisma.AgentRunUpsertWithWhereUniqueWithoutConversationInput | Prisma.AgentRunUpsertWithWhereUniqueWithoutConversationInput[]
+  createMany?: Prisma.AgentRunCreateManyConversationInputEnvelope
+  set?: Prisma.AgentRunWhereUniqueInput | Prisma.AgentRunWhereUniqueInput[]
+  disconnect?: Prisma.AgentRunWhereUniqueInput | Prisma.AgentRunWhereUniqueInput[]
+  delete?: Prisma.AgentRunWhereUniqueInput | Prisma.AgentRunWhereUniqueInput[]
+  connect?: Prisma.AgentRunWhereUniqueInput | Prisma.AgentRunWhereUniqueInput[]
+  update?: Prisma.AgentRunUpdateWithWhereUniqueWithoutConversationInput | Prisma.AgentRunUpdateWithWhereUniqueWithoutConversationInput[]
+  updateMany?: Prisma.AgentRunUpdateManyWithWhereWithoutConversationInput | Prisma.AgentRunUpdateManyWithWhereWithoutConversationInput[]
+  deleteMany?: Prisma.AgentRunScalarWhereInput | Prisma.AgentRunScalarWhereInput[]
+}
+
+export type AgentRunUncheckedUpdateManyWithoutConversationNestedInput = {
+  create?: Prisma.XOR<Prisma.AgentRunCreateWithoutConversationInput, Prisma.AgentRunUncheckedCreateWithoutConversationInput> | Prisma.AgentRunCreateWithoutConversationInput[] | Prisma.AgentRunUncheckedCreateWithoutConversationInput[]
+  connectOrCreate?: Prisma.AgentRunCreateOrConnectWithoutConversationInput | Prisma.AgentRunCreateOrConnectWithoutConversationInput[]
+  upsert?: Prisma.AgentRunUpsertWithWhereUniqueWithoutConversationInput | Prisma.AgentRunUpsertWithWhereUniqueWithoutConversationInput[]
+  createMany?: Prisma.AgentRunCreateManyConversationInputEnvelope
+  set?: Prisma.AgentRunWhereUniqueInput | Prisma.AgentRunWhereUniqueInput[]
+  disconnect?: Prisma.AgentRunWhereUniqueInput | Prisma.AgentRunWhereUniqueInput[]
+  delete?: Prisma.AgentRunWhereUniqueInput | Prisma.AgentRunWhereUniqueInput[]
+  connect?: Prisma.AgentRunWhereUniqueInput | Prisma.AgentRunWhereUniqueInput[]
+  update?: Prisma.AgentRunUpdateWithWhereUniqueWithoutConversationInput | Prisma.AgentRunUpdateWithWhereUniqueWithoutConversationInput[]
+  updateMany?: Prisma.AgentRunUpdateManyWithWhereWithoutConversationInput | Prisma.AgentRunUpdateManyWithWhereWithoutConversationInput[]
+  deleteMany?: Prisma.AgentRunScalarWhereInput | Prisma.AgentRunScalarWhereInput[]
 }
 
 export type EnumAgentRunStatusFieldUpdateOperationsInput = {
   set?: $Enums.AgentRunStatus
+}
+
+export type IntFieldUpdateOperationsInput = {
+  set?: number
+  increment?: number
+  decrement?: number
+  multiply?: number
+  divide?: number
 }
 
 export type NullableDateTimeFieldUpdateOperationsInput = {
@@ -453,6 +649,86 @@ export type AgentRunUpdateOneRequiredWithoutStepsNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.AgentRunUpdateToOneWithWhereWithoutStepsInput, Prisma.AgentRunUpdateWithoutStepsInput>, Prisma.AgentRunUncheckedUpdateWithoutStepsInput>
 }
 
+export type AgentRunCreateWithoutConversationInput = {
+  id?: string
+  userId: string
+  mode: $Enums.AgentRunMode
+  prompt: string
+  status?: $Enums.AgentRunStatus
+  repoFullName?: string | null
+  branch?: string | null
+  prUrl?: string | null
+  tokensIn?: number
+  tokensOut?: number
+  errorMessage?: string | null
+  createdAt?: Date | string
+  finishedAt?: Date | string | null
+  steps?: Prisma.AgentStepCreateNestedManyWithoutRunInput
+}
+
+export type AgentRunUncheckedCreateWithoutConversationInput = {
+  id?: string
+  userId: string
+  mode: $Enums.AgentRunMode
+  prompt: string
+  status?: $Enums.AgentRunStatus
+  repoFullName?: string | null
+  branch?: string | null
+  prUrl?: string | null
+  tokensIn?: number
+  tokensOut?: number
+  errorMessage?: string | null
+  createdAt?: Date | string
+  finishedAt?: Date | string | null
+  steps?: Prisma.AgentStepUncheckedCreateNestedManyWithoutRunInput
+}
+
+export type AgentRunCreateOrConnectWithoutConversationInput = {
+  where: Prisma.AgentRunWhereUniqueInput
+  create: Prisma.XOR<Prisma.AgentRunCreateWithoutConversationInput, Prisma.AgentRunUncheckedCreateWithoutConversationInput>
+}
+
+export type AgentRunCreateManyConversationInputEnvelope = {
+  data: Prisma.AgentRunCreateManyConversationInput | Prisma.AgentRunCreateManyConversationInput[]
+  skipDuplicates?: boolean
+}
+
+export type AgentRunUpsertWithWhereUniqueWithoutConversationInput = {
+  where: Prisma.AgentRunWhereUniqueInput
+  update: Prisma.XOR<Prisma.AgentRunUpdateWithoutConversationInput, Prisma.AgentRunUncheckedUpdateWithoutConversationInput>
+  create: Prisma.XOR<Prisma.AgentRunCreateWithoutConversationInput, Prisma.AgentRunUncheckedCreateWithoutConversationInput>
+}
+
+export type AgentRunUpdateWithWhereUniqueWithoutConversationInput = {
+  where: Prisma.AgentRunWhereUniqueInput
+  data: Prisma.XOR<Prisma.AgentRunUpdateWithoutConversationInput, Prisma.AgentRunUncheckedUpdateWithoutConversationInput>
+}
+
+export type AgentRunUpdateManyWithWhereWithoutConversationInput = {
+  where: Prisma.AgentRunScalarWhereInput
+  data: Prisma.XOR<Prisma.AgentRunUpdateManyMutationInput, Prisma.AgentRunUncheckedUpdateManyWithoutConversationInput>
+}
+
+export type AgentRunScalarWhereInput = {
+  AND?: Prisma.AgentRunScalarWhereInput | Prisma.AgentRunScalarWhereInput[]
+  OR?: Prisma.AgentRunScalarWhereInput[]
+  NOT?: Prisma.AgentRunScalarWhereInput | Prisma.AgentRunScalarWhereInput[]
+  id?: Prisma.StringFilter<"AgentRun"> | string
+  userId?: Prisma.StringFilter<"AgentRun"> | string
+  mode?: Prisma.EnumAgentRunModeFilter<"AgentRun"> | $Enums.AgentRunMode
+  prompt?: Prisma.StringFilter<"AgentRun"> | string
+  status?: Prisma.EnumAgentRunStatusFilter<"AgentRun"> | $Enums.AgentRunStatus
+  conversationId?: Prisma.StringNullableFilter<"AgentRun"> | string | null
+  repoFullName?: Prisma.StringNullableFilter<"AgentRun"> | string | null
+  branch?: Prisma.StringNullableFilter<"AgentRun"> | string | null
+  prUrl?: Prisma.StringNullableFilter<"AgentRun"> | string | null
+  tokensIn?: Prisma.IntFilter<"AgentRun"> | number
+  tokensOut?: Prisma.IntFilter<"AgentRun"> | number
+  errorMessage?: Prisma.StringNullableFilter<"AgentRun"> | string | null
+  createdAt?: Prisma.DateTimeFilter<"AgentRun"> | Date | string
+  finishedAt?: Prisma.DateTimeNullableFilter<"AgentRun"> | Date | string | null
+}
+
 export type AgentRunCreateWithoutStepsInput = {
   id?: string
   userId: string
@@ -462,8 +738,12 @@ export type AgentRunCreateWithoutStepsInput = {
   repoFullName?: string | null
   branch?: string | null
   prUrl?: string | null
+  tokensIn?: number
+  tokensOut?: number
+  errorMessage?: string | null
   createdAt?: Date | string
   finishedAt?: Date | string | null
+  conversation?: Prisma.ConversationCreateNestedOneWithoutRunsInput
 }
 
 export type AgentRunUncheckedCreateWithoutStepsInput = {
@@ -472,9 +752,13 @@ export type AgentRunUncheckedCreateWithoutStepsInput = {
   mode: $Enums.AgentRunMode
   prompt: string
   status?: $Enums.AgentRunStatus
+  conversationId?: string | null
   repoFullName?: string | null
   branch?: string | null
   prUrl?: string | null
+  tokensIn?: number
+  tokensOut?: number
+  errorMessage?: string | null
   createdAt?: Date | string
   finishedAt?: Date | string | null
 }
@@ -504,8 +788,12 @@ export type AgentRunUpdateWithoutStepsInput = {
   repoFullName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   branch?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  tokensIn?: Prisma.IntFieldUpdateOperationsInput | number
+  tokensOut?: Prisma.IntFieldUpdateOperationsInput | number
+  errorMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   finishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  conversation?: Prisma.ConversationUpdateOneWithoutRunsNestedInput
 }
 
 export type AgentRunUncheckedUpdateWithoutStepsInput = {
@@ -514,9 +802,79 @@ export type AgentRunUncheckedUpdateWithoutStepsInput = {
   mode?: Prisma.EnumAgentRunModeFieldUpdateOperationsInput | $Enums.AgentRunMode
   prompt?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus
+  conversationId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   repoFullName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   branch?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  tokensIn?: Prisma.IntFieldUpdateOperationsInput | number
+  tokensOut?: Prisma.IntFieldUpdateOperationsInput | number
+  errorMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  finishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+}
+
+export type AgentRunCreateManyConversationInput = {
+  id?: string
+  userId: string
+  mode: $Enums.AgentRunMode
+  prompt: string
+  status?: $Enums.AgentRunStatus
+  repoFullName?: string | null
+  branch?: string | null
+  prUrl?: string | null
+  tokensIn?: number
+  tokensOut?: number
+  errorMessage?: string | null
+  createdAt?: Date | string
+  finishedAt?: Date | string | null
+}
+
+export type AgentRunUpdateWithoutConversationInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  userId?: Prisma.StringFieldUpdateOperationsInput | string
+  mode?: Prisma.EnumAgentRunModeFieldUpdateOperationsInput | $Enums.AgentRunMode
+  prompt?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus
+  repoFullName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  branch?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  prUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  tokensIn?: Prisma.IntFieldUpdateOperationsInput | number
+  tokensOut?: Prisma.IntFieldUpdateOperationsInput | number
+  errorMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  finishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  steps?: Prisma.AgentStepUpdateManyWithoutRunNestedInput
+}
+
+export type AgentRunUncheckedUpdateWithoutConversationInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  userId?: Prisma.StringFieldUpdateOperationsInput | string
+  mode?: Prisma.EnumAgentRunModeFieldUpdateOperationsInput | $Enums.AgentRunMode
+  prompt?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus
+  repoFullName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  branch?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  prUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  tokensIn?: Prisma.IntFieldUpdateOperationsInput | number
+  tokensOut?: Prisma.IntFieldUpdateOperationsInput | number
+  errorMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  finishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  steps?: Prisma.AgentStepUncheckedUpdateManyWithoutRunNestedInput
+}
+
+export type AgentRunUncheckedUpdateManyWithoutConversationInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  userId?: Prisma.StringFieldUpdateOperationsInput | string
+  mode?: Prisma.EnumAgentRunModeFieldUpdateOperationsInput | $Enums.AgentRunMode
+  prompt?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus
+  repoFullName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  branch?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  prUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  tokensIn?: Prisma.IntFieldUpdateOperationsInput | number
+  tokensOut?: Prisma.IntFieldUpdateOperationsInput | number
+  errorMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   finishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
 }
@@ -558,11 +916,16 @@ export type AgentRunSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs
   mode?: boolean
   prompt?: boolean
   status?: boolean
+  conversationId?: boolean
   repoFullName?: boolean
   branch?: boolean
   prUrl?: boolean
+  tokensIn?: boolean
+  tokensOut?: boolean
+  errorMessage?: boolean
   createdAt?: boolean
   finishedAt?: boolean
+  conversation?: boolean | Prisma.AgentRun$conversationArgs<ExtArgs>
   steps?: boolean | Prisma.AgentRun$stepsArgs<ExtArgs>
   _count?: boolean | Prisma.AgentRunCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["agentRun"]>
@@ -573,11 +936,16 @@ export type AgentRunSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Exte
   mode?: boolean
   prompt?: boolean
   status?: boolean
+  conversationId?: boolean
   repoFullName?: boolean
   branch?: boolean
   prUrl?: boolean
+  tokensIn?: boolean
+  tokensOut?: boolean
+  errorMessage?: boolean
   createdAt?: boolean
   finishedAt?: boolean
+  conversation?: boolean | Prisma.AgentRun$conversationArgs<ExtArgs>
 }, ExtArgs["result"]["agentRun"]>
 
 export type AgentRunSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -586,11 +954,16 @@ export type AgentRunSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Exte
   mode?: boolean
   prompt?: boolean
   status?: boolean
+  conversationId?: boolean
   repoFullName?: boolean
   branch?: boolean
   prUrl?: boolean
+  tokensIn?: boolean
+  tokensOut?: boolean
+  errorMessage?: boolean
   createdAt?: boolean
   finishedAt?: boolean
+  conversation?: boolean | Prisma.AgentRun$conversationArgs<ExtArgs>
 }, ExtArgs["result"]["agentRun"]>
 
 export type AgentRunSelectScalar = {
@@ -599,24 +972,34 @@ export type AgentRunSelectScalar = {
   mode?: boolean
   prompt?: boolean
   status?: boolean
+  conversationId?: boolean
   repoFullName?: boolean
   branch?: boolean
   prUrl?: boolean
+  tokensIn?: boolean
+  tokensOut?: boolean
+  errorMessage?: boolean
   createdAt?: boolean
   finishedAt?: boolean
 }
 
-export type AgentRunOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "userId" | "mode" | "prompt" | "status" | "repoFullName" | "branch" | "prUrl" | "createdAt" | "finishedAt", ExtArgs["result"]["agentRun"]>
+export type AgentRunOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "userId" | "mode" | "prompt" | "status" | "conversationId" | "repoFullName" | "branch" | "prUrl" | "tokensIn" | "tokensOut" | "errorMessage" | "createdAt" | "finishedAt", ExtArgs["result"]["agentRun"]>
 export type AgentRunInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  conversation?: boolean | Prisma.AgentRun$conversationArgs<ExtArgs>
   steps?: boolean | Prisma.AgentRun$stepsArgs<ExtArgs>
   _count?: boolean | Prisma.AgentRunCountOutputTypeDefaultArgs<ExtArgs>
 }
-export type AgentRunIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {}
-export type AgentRunIncludeUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {}
+export type AgentRunIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  conversation?: boolean | Prisma.AgentRun$conversationArgs<ExtArgs>
+}
+export type AgentRunIncludeUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  conversation?: boolean | Prisma.AgentRun$conversationArgs<ExtArgs>
+}
 
 export type $AgentRunPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   name: "AgentRun"
   objects: {
+    conversation: Prisma.$ConversationPayload<ExtArgs> | null
     steps: Prisma.$AgentStepPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
@@ -625,9 +1008,13 @@ export type $AgentRunPayload<ExtArgs extends runtime.Types.Extensions.InternalAr
     mode: $Enums.AgentRunMode
     prompt: string
     status: $Enums.AgentRunStatus
+    conversationId: string | null
     repoFullName: string | null
     branch: string | null
     prUrl: string | null
+    tokensIn: number
+    tokensOut: number
+    errorMessage: string | null
     createdAt: Date
     finishedAt: Date | null
   }, ExtArgs["result"]["agentRun"]>
@@ -1024,6 +1411,7 @@ readonly fields: AgentRunFieldRefs;
  */
 export interface Prisma__AgentRunClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
   readonly [Symbol.toStringTag]: "PrismaPromise"
+  conversation<T extends Prisma.AgentRun$conversationArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AgentRun$conversationArgs<ExtArgs>>): Prisma.Prisma__ConversationClient<runtime.Types.Result.GetResult<Prisma.$ConversationPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   steps<T extends Prisma.AgentRun$stepsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AgentRun$stepsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AgentStepPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
@@ -1059,9 +1447,13 @@ export interface AgentRunFieldRefs {
   readonly mode: Prisma.FieldRef<"AgentRun", 'AgentRunMode'>
   readonly prompt: Prisma.FieldRef<"AgentRun", 'String'>
   readonly status: Prisma.FieldRef<"AgentRun", 'AgentRunStatus'>
+  readonly conversationId: Prisma.FieldRef<"AgentRun", 'String'>
   readonly repoFullName: Prisma.FieldRef<"AgentRun", 'String'>
   readonly branch: Prisma.FieldRef<"AgentRun", 'String'>
   readonly prUrl: Prisma.FieldRef<"AgentRun", 'String'>
+  readonly tokensIn: Prisma.FieldRef<"AgentRun", 'Int'>
+  readonly tokensOut: Prisma.FieldRef<"AgentRun", 'Int'>
+  readonly errorMessage: Prisma.FieldRef<"AgentRun", 'String'>
   readonly createdAt: Prisma.FieldRef<"AgentRun", 'DateTime'>
   readonly finishedAt: Prisma.FieldRef<"AgentRun", 'DateTime'>
 }
@@ -1318,6 +1710,10 @@ export type AgentRunCreateManyAndReturnArgs<ExtArgs extends runtime.Types.Extens
    */
   data: Prisma.AgentRunCreateManyInput | Prisma.AgentRunCreateManyInput[]
   skipDuplicates?: boolean
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.AgentRunIncludeCreateManyAndReturn<ExtArgs> | null
 }
 
 /**
@@ -1388,6 +1784,10 @@ export type AgentRunUpdateManyAndReturnArgs<ExtArgs extends runtime.Types.Extens
    * Limit how many AgentRuns to update.
    */
   limit?: number
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.AgentRunIncludeUpdateManyAndReturn<ExtArgs> | null
 }
 
 /**
@@ -1454,6 +1854,25 @@ export type AgentRunDeleteManyArgs<ExtArgs extends runtime.Types.Extensions.Inte
    * Limit how many AgentRuns to delete.
    */
   limit?: number
+}
+
+/**
+ * AgentRun.conversation
+ */
+export type AgentRun$conversationArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Conversation
+   */
+  select?: Prisma.ConversationSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Conversation
+   */
+  omit?: Prisma.ConversationOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.ConversationInclude<ExtArgs> | null
+  where?: Prisma.ConversationWhereInput
 }
 
 /**

@@ -30,6 +30,7 @@ export type SandboxMinAggregateOutputType = {
   image: string | null
   volumeName: string | null
   containerName: string | null
+  llmTokenHash: string | null
   createdAt: Date | null
   updatedAt: Date | null
   lastActiveAt: Date | null
@@ -41,6 +42,7 @@ export type SandboxMaxAggregateOutputType = {
   image: string | null
   volumeName: string | null
   containerName: string | null
+  llmTokenHash: string | null
   createdAt: Date | null
   updatedAt: Date | null
   lastActiveAt: Date | null
@@ -52,6 +54,7 @@ export type SandboxCountAggregateOutputType = {
   image: number
   volumeName: number
   containerName: number
+  llmTokenHash: number
   createdAt: number
   updatedAt: number
   lastActiveAt: number
@@ -65,6 +68,7 @@ export type SandboxMinAggregateInputType = {
   image?: true
   volumeName?: true
   containerName?: true
+  llmTokenHash?: true
   createdAt?: true
   updatedAt?: true
   lastActiveAt?: true
@@ -76,6 +80,7 @@ export type SandboxMaxAggregateInputType = {
   image?: true
   volumeName?: true
   containerName?: true
+  llmTokenHash?: true
   createdAt?: true
   updatedAt?: true
   lastActiveAt?: true
@@ -87,6 +92,7 @@ export type SandboxCountAggregateInputType = {
   image?: true
   volumeName?: true
   containerName?: true
+  llmTokenHash?: true
   createdAt?: true
   updatedAt?: true
   lastActiveAt?: true
@@ -171,6 +177,7 @@ export type SandboxGroupByOutputType = {
   image: string
   volumeName: string
   containerName: string
+  llmTokenHash: string | null
   createdAt: Date
   updatedAt: Date
   lastActiveAt: Date
@@ -203,6 +210,7 @@ export type SandboxWhereInput = {
   image?: Prisma.StringFilter<"Sandbox"> | string
   volumeName?: Prisma.StringFilter<"Sandbox"> | string
   containerName?: Prisma.StringFilter<"Sandbox"> | string
+  llmTokenHash?: Prisma.StringNullableFilter<"Sandbox"> | string | null
   createdAt?: Prisma.DateTimeFilter<"Sandbox"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Sandbox"> | Date | string
   lastActiveAt?: Prisma.DateTimeFilter<"Sandbox"> | Date | string
@@ -215,6 +223,7 @@ export type SandboxOrderByWithRelationInput = {
   image?: Prisma.SortOrder
   volumeName?: Prisma.SortOrder
   containerName?: Prisma.SortOrder
+  llmTokenHash?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   lastActiveAt?: Prisma.SortOrder
@@ -230,6 +239,7 @@ export type SandboxWhereUniqueInput = Prisma.AtLeast<{
   OR?: Prisma.SandboxWhereInput[]
   NOT?: Prisma.SandboxWhereInput | Prisma.SandboxWhereInput[]
   image?: Prisma.StringFilter<"Sandbox"> | string
+  llmTokenHash?: Prisma.StringNullableFilter<"Sandbox"> | string | null
   createdAt?: Prisma.DateTimeFilter<"Sandbox"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Sandbox"> | Date | string
   lastActiveAt?: Prisma.DateTimeFilter<"Sandbox"> | Date | string
@@ -242,6 +252,7 @@ export type SandboxOrderByWithAggregationInput = {
   image?: Prisma.SortOrder
   volumeName?: Prisma.SortOrder
   containerName?: Prisma.SortOrder
+  llmTokenHash?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   lastActiveAt?: Prisma.SortOrder
@@ -259,6 +270,7 @@ export type SandboxScalarWhereWithAggregatesInput = {
   image?: Prisma.StringWithAggregatesFilter<"Sandbox"> | string
   volumeName?: Prisma.StringWithAggregatesFilter<"Sandbox"> | string
   containerName?: Prisma.StringWithAggregatesFilter<"Sandbox"> | string
+  llmTokenHash?: Prisma.StringNullableWithAggregatesFilter<"Sandbox"> | string | null
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"Sandbox"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"Sandbox"> | Date | string
   lastActiveAt?: Prisma.DateTimeWithAggregatesFilter<"Sandbox"> | Date | string
@@ -269,6 +281,7 @@ export type SandboxCreateInput = {
   image: string
   volumeName: string
   containerName: string
+  llmTokenHash?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   lastActiveAt?: Date | string
@@ -281,6 +294,7 @@ export type SandboxUncheckedCreateInput = {
   image: string
   volumeName: string
   containerName: string
+  llmTokenHash?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   lastActiveAt?: Date | string
@@ -291,6 +305,7 @@ export type SandboxUpdateInput = {
   image?: Prisma.StringFieldUpdateOperationsInput | string
   volumeName?: Prisma.StringFieldUpdateOperationsInput | string
   containerName?: Prisma.StringFieldUpdateOperationsInput | string
+  llmTokenHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   lastActiveAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -303,6 +318,7 @@ export type SandboxUncheckedUpdateInput = {
   image?: Prisma.StringFieldUpdateOperationsInput | string
   volumeName?: Prisma.StringFieldUpdateOperationsInput | string
   containerName?: Prisma.StringFieldUpdateOperationsInput | string
+  llmTokenHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   lastActiveAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -314,6 +330,7 @@ export type SandboxCreateManyInput = {
   image: string
   volumeName: string
   containerName: string
+  llmTokenHash?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   lastActiveAt?: Date | string
@@ -324,6 +341,7 @@ export type SandboxUpdateManyMutationInput = {
   image?: Prisma.StringFieldUpdateOperationsInput | string
   volumeName?: Prisma.StringFieldUpdateOperationsInput | string
   containerName?: Prisma.StringFieldUpdateOperationsInput | string
+  llmTokenHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   lastActiveAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -335,6 +353,7 @@ export type SandboxUncheckedUpdateManyInput = {
   image?: Prisma.StringFieldUpdateOperationsInput | string
   volumeName?: Prisma.StringFieldUpdateOperationsInput | string
   containerName?: Prisma.StringFieldUpdateOperationsInput | string
+  llmTokenHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   lastActiveAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -351,6 +370,7 @@ export type SandboxCountOrderByAggregateInput = {
   image?: Prisma.SortOrder
   volumeName?: Prisma.SortOrder
   containerName?: Prisma.SortOrder
+  llmTokenHash?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   lastActiveAt?: Prisma.SortOrder
@@ -362,6 +382,7 @@ export type SandboxMaxOrderByAggregateInput = {
   image?: Prisma.SortOrder
   volumeName?: Prisma.SortOrder
   containerName?: Prisma.SortOrder
+  llmTokenHash?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   lastActiveAt?: Prisma.SortOrder
@@ -373,6 +394,7 @@ export type SandboxMinOrderByAggregateInput = {
   image?: Prisma.SortOrder
   volumeName?: Prisma.SortOrder
   containerName?: Prisma.SortOrder
+  llmTokenHash?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   lastActiveAt?: Prisma.SortOrder
@@ -415,6 +437,7 @@ export type SandboxCreateWithoutUserInput = {
   image: string
   volumeName: string
   containerName: string
+  llmTokenHash?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   lastActiveAt?: Date | string
@@ -425,6 +448,7 @@ export type SandboxUncheckedCreateWithoutUserInput = {
   image: string
   volumeName: string
   containerName: string
+  llmTokenHash?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   lastActiveAt?: Date | string
@@ -451,6 +475,7 @@ export type SandboxUpdateWithoutUserInput = {
   image?: Prisma.StringFieldUpdateOperationsInput | string
   volumeName?: Prisma.StringFieldUpdateOperationsInput | string
   containerName?: Prisma.StringFieldUpdateOperationsInput | string
+  llmTokenHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   lastActiveAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -461,6 +486,7 @@ export type SandboxUncheckedUpdateWithoutUserInput = {
   image?: Prisma.StringFieldUpdateOperationsInput | string
   volumeName?: Prisma.StringFieldUpdateOperationsInput | string
   containerName?: Prisma.StringFieldUpdateOperationsInput | string
+  llmTokenHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   lastActiveAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -474,6 +500,7 @@ export type SandboxSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs 
   image?: boolean
   volumeName?: boolean
   containerName?: boolean
+  llmTokenHash?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   lastActiveAt?: boolean
@@ -486,6 +513,7 @@ export type SandboxSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Exten
   image?: boolean
   volumeName?: boolean
   containerName?: boolean
+  llmTokenHash?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   lastActiveAt?: boolean
@@ -498,6 +526,7 @@ export type SandboxSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Exten
   image?: boolean
   volumeName?: boolean
   containerName?: boolean
+  llmTokenHash?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   lastActiveAt?: boolean
@@ -510,12 +539,13 @@ export type SandboxSelectScalar = {
   image?: boolean
   volumeName?: boolean
   containerName?: boolean
+  llmTokenHash?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   lastActiveAt?: boolean
 }
 
-export type SandboxOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "userId" | "image" | "volumeName" | "containerName" | "createdAt" | "updatedAt" | "lastActiveAt", ExtArgs["result"]["sandbox"]>
+export type SandboxOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "userId" | "image" | "volumeName" | "containerName" | "llmTokenHash" | "createdAt" | "updatedAt" | "lastActiveAt", ExtArgs["result"]["sandbox"]>
 export type SandboxInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   user?: boolean | Prisma.UserDefaultArgs<ExtArgs>
 }
@@ -537,6 +567,11 @@ export type $SandboxPayload<ExtArgs extends runtime.Types.Extensions.InternalArg
     image: string
     volumeName: string
     containerName: string
+    /**
+     * sha256 of the per-container LLM proxy token (plaintext lives only in
+     * the container env; the proxy verifies by hashing the presented token).
+     */
+    llmTokenHash: string | null
     createdAt: Date
     updatedAt: Date
     lastActiveAt: Date
@@ -969,6 +1004,7 @@ export interface SandboxFieldRefs {
   readonly image: Prisma.FieldRef<"Sandbox", 'String'>
   readonly volumeName: Prisma.FieldRef<"Sandbox", 'String'>
   readonly containerName: Prisma.FieldRef<"Sandbox", 'String'>
+  readonly llmTokenHash: Prisma.FieldRef<"Sandbox", 'String'>
   readonly createdAt: Prisma.FieldRef<"Sandbox", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"Sandbox", 'DateTime'>
   readonly lastActiveAt: Prisma.FieldRef<"Sandbox", 'DateTime'>

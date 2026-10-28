@@ -425,14 +425,6 @@ export type AgentStepUncheckedUpdateManyWithoutRunNestedInput = {
   deleteMany?: Prisma.AgentStepScalarWhereInput | Prisma.AgentStepScalarWhereInput[]
 }
 
-export type IntFieldUpdateOperationsInput = {
-  set?: number
-  increment?: number
-  decrement?: number
-  multiply?: number
-  divide?: number
-}
-
 export type AgentStepCreateWithoutRunInput = {
   id?: string
   seq: number

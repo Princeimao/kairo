@@ -56,6 +56,9 @@ export const ModelName = {
   Session: 'Session',
   GithubEvent: 'GithubEvent',
   Sandbox: 'Sandbox',
+  ChatSession: 'ChatSession',
+  Conversation: 'Conversation',
+  Message: 'Message',
   AgentRun: 'AgentRun',
   AgentStep: 'AgentStep'
 } as const
@@ -141,6 +144,7 @@ export const SandboxScalarFieldEnum = {
   image: 'image',
   volumeName: 'volumeName',
   containerName: 'containerName',
+  llmTokenHash: 'llmTokenHash',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt',
   lastActiveAt: 'lastActiveAt'
@@ -149,15 +153,55 @@ export const SandboxScalarFieldEnum = {
 export type SandboxScalarFieldEnum = (typeof SandboxScalarFieldEnum)[keyof typeof SandboxScalarFieldEnum]
 
 
+export const ChatSessionScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  title: 'title',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type ChatSessionScalarFieldEnum = (typeof ChatSessionScalarFieldEnum)[keyof typeof ChatSessionScalarFieldEnum]
+
+
+export const ConversationScalarFieldEnum = {
+  id: 'id',
+  sessionId: 'sessionId',
+  userId: 'userId',
+  mode: 'mode',
+  opencodeSessionId: 'opencodeSessionId',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type ConversationScalarFieldEnum = (typeof ConversationScalarFieldEnum)[keyof typeof ConversationScalarFieldEnum]
+
+
+export const MessageScalarFieldEnum = {
+  id: 'id',
+  conversationId: 'conversationId',
+  role: 'role',
+  content: 'content',
+  runId: 'runId',
+  createdAt: 'createdAt'
+} as const
+
+export type MessageScalarFieldEnum = (typeof MessageScalarFieldEnum)[keyof typeof MessageScalarFieldEnum]
+
+
 export const AgentRunScalarFieldEnum = {
   id: 'id',
   userId: 'userId',
   mode: 'mode',
   prompt: 'prompt',
   status: 'status',
+  conversationId: 'conversationId',
   repoFullName: 'repoFullName',
   branch: 'branch',
   prUrl: 'prUrl',
+  tokensIn: 'tokensIn',
+  tokensOut: 'tokensOut',
+  errorMessage: 'errorMessage',
   createdAt: 'createdAt',
   finishedAt: 'finishedAt'
 } as const
