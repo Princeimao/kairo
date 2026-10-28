@@ -1,63 +1,48 @@
-# Model notes (Stage 5 — agent core)
+# Model notes (OpenCode harness)
 
-Provider: [Nebius Token Factory](https://tokenfactory.nebius.com) — OpenAI-compatible API.
+Model calls no longer go through a hand-rolled loop. OpenCode inside each user
+sandbox talks to a **token-gated LLM proxy** in the API process
+(`apps/api/src/llm/proxy.ts`, mounted at `/internal/llm`), which forwards to an
+OpenAI-compatible upstream.
 
-- Endpoint used by the agent: `NEBIUS_BASE_URL` (default `https://api.tokenfactory.nebius.com/v1`).
-- Auth: `Authorization: Bearer NEBIUS_API_KEY`.
+## Provider
 
-## Status: PENDING LIVE PROBE
+- Upstream: `NEBIUS_BASE_URL` + `NEBIUS_API_KEY` (any OpenAI-compatible endpoint).
+- Current local default (apps/api/.env): OpenRouter —
+  `https://openrouter.ai/api/v1`, model `nvidia/nemotron-3.5-super-vl:free`.
+- The proxy injects the upstream key; containers only ever hold their own
+  per-container Kairo token (HMAC-derived, hash-only in the DB).
 
-`NEBIUS_API_KEY` was not available when this stage was built, so the reliability
-probes below describe **what will be tested and how**, not yet observed results.
+## Model selection
 
-After adding the key (packages/agent/.env, repo root .env, or shell env), run:
+- `OPENCODE_MODEL` — default model written into each container's
+  `opencode.json` (`<providerID>/<modelID>`, provider id `kairo`).
+- `LLM_MODEL_ALLOWLIST` — comma-separated ids the proxy will forward
+  (default `nvidia/nemotron-3.5-super-vl:free`). Requests for other models are
+  rejected at the proxy.
+- `OPENCODE_PROVIDER_ID` (worker) — provider key in opencode.json; default `kairo`.
 
-```
-npm run model:check -w packages/agent
-```
+The proxy also enforces `max_tokens` (cap 8192) and injects
+`stream_options.include_usage` so token counts land on `AgentRun.tokensIn/Out`.
 
-It probes every model in `AGENT_PROBE_MODELS` (comma separated) with three tests
-and prints a markdown table ready to paste into this file:
+## Historical probes (deleted)
 
-1. **single tool call** — one tool with no required args, `toolChoice: "required"`;
-   passes when the model makes exactly one correct call.
-2. **multi-step tool use** — `add(a, b)` then `finish(summary)` across steps;
-   passes when both calls happen and the summary contains the correct result (42).
-3. **structured output** — strict JSON object via `Output.object` with a zod schema;
-   passes when the exact object comes back.
+The old `npm run model:check` / `offline:check` probes lived in
+`packages/agent` (AI SDK loop, planner/executor split, JSON tool mode) and were
+removed with that package in R2. The planner/executor model split no longer
+exists — one model per conversation, chosen via `OPENCODE_MODEL`.
 
-Observations to record per model: verdict per test, latency (ms), error messages,
-and any prompt-shape adjustments that made it work.
+If a new upstream/model needs vetting, probe it against the container path:
+start a run with `OPENCODE_MODEL` pointed at the candidate, keep
+`LLM_MODEL_ALLOWLIST` in sync, and check `session.idle` completion + tool-call
+quality from the SSE stream (`GET /runs/:id/events`).
 
-## Candidate Nemotron models (from the Token Factory catalog)
+## Candidate models (kept for reference)
 
 | model id | context | notes |
 | --- | --- | --- |
-| `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | 262K | smallest/cheapest Nemotron; candidate planner |
-| `nvidia/nemotron-3-super-120b-a12b` | 256K | "supports function calling and structured output out of the box" per vendor docs; candidate executor |
-| `nvidia/Nemotron-3_5-Lightning` | 1024K | newer 3.5 line, cheap; probe both roles |
-| `nvidia/Nemotron-3-Ultra-550b-a55b` | 1024K | flagship; heavy/expensive — probe for tool calling, likely overkill for executor |
-| `nvidia/Nemotron-3.5-Super-VL` | 1024K | vision-language — out of scope (text tools only) |
-
-## Current defaults (until live results)
-
-- `AGENT_PLANNER_MODEL=nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` — planning is short
-  structured output; use the small model for cost/latency.
-- `AGENT_EXECUTOR_MODEL=nvidia/nemotron-3-super-120b-a12b` — tool calling and
-  structured output are documented as first-class for this model.
-
-## Fallback design (independent of probe results)
-
-- The product calls tool executors through one shared executor layer
-  (`packages/agent/src/tools/executors.ts`). Both integration paths call it:
-  - **native** (default): AI SDK `streamText` tool loop.
-  - **json** (`AGENT_TOOL_MODE=json`): model emits one strict JSON action per
-    turn, validated with a zod discriminated union (`tools/actions.ts`), then the
-    same executors run it. This must work even when native tool calling is
-    unreliable.
-- `npm run offline:check -w packages/agent` runs the full workspace safety suite
-  and both loop modes against mock models with no network access (25 checks).
-- Decision rule once probing is done: if a model fails single/multi/structured
-  probes consistently (>1 failure per 5 runs), switch it to `json` mode or drop
-  it from the candidate list. Executor should be the model with the best
-  multi-step score; planner only needs structured output.
+| `nvidia/nemotron-3.5-super-vl:free` | 1024K | current default (vision-language; text tools only used) |
+| `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | 262K | smallest/cheapest Nemotron |
+| `nvidia/nemotron-3-super-120b-a12b` | 256K | vendor docs: function calling + structured output out of the box |
+| `nvidia/Nemotron-3_5-Lightning` | 1024K | newer 3.5 line, cheap |
+| `nvidia/Nemotron-3-Ultra-550b-a55b` | 1024K | flagship; heavy/expensive — likely overkill |

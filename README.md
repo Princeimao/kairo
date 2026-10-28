@@ -1,173 +1,80 @@
-# Turborepo starter
+# Kairo
 
-This Turborepo starter is maintained by the Turborepo core team.
+AI coding agent platform. Each user gets an isolated Docker workspace running
+[OpenCode](https://opencode.ai) (`opencode-ai@1.19.5`); the API and worker only
+orchestrate — OpenCode does the coding inside the container, and all LLM calls
+go through a token-gated host-side proxy.
 
-## Kairo quick start
+```
+web (:3000) ──► api (:4000) ──► BullMQ (redis) ──► worker
+                  │  ▲                                │
+                  │  └── SSE relay ◄── pub/sub ◄──────┤
+                  │                                    │
+             LLM proxy (:4100) ◄───────────────────────┤
+                  ▲                                    │
+                  └── OpenCode SDK ──► sandbox container
+                        (opencode serve, per-user network + volume)
+```
+
+- **Chat model:** `ChatSession` → many `Conversation` → many `Message`.
+  A conversation maps 1:1 to an OpenCode session (`opencodeSessionId`), which
+  survives container restarts via the volume-persisted `/workspace/.kairo`.
+- **Runs:** `POST /runs` stores the USER message, enqueues `{runId, userId}`,
+  and the worker drives OpenCode over the SDK: workspace events, streaming
+  text/reasoning, tool calls, and a final reply persisted as the AGENT message.
+- **LLM proxy:** the worker writes each container's `opencode.json` with a
+  provider pointing at `http://host.docker.internal:4100/internal/llm/v1`;
+  requests carry a per-container bearer token (HMAC-derived, only the hash is
+  stored) and are checked against the active run + model allowlist.
+- **GitHub:** when a run has a `repoFullName`, the worker clones with the
+  user's stored GitHub token, and on success pushes a `kairo/<runId>` branch
+  and opens a pull request from the reply summary.
+
+## Quick start
 
 ```sh
-docker compose up -d        # Postgres
+docker compose up -d          # Postgres + Redis
 npm install
 npm run db:migrate -w @kairo/db
-cp .env.example apps/api/.env   # then fill in the GitHub OAuth values
-npm run dev                 # api on :4000, web on :3000
+npm run sandbox:build         # builds kairo-sandbox:latest (OpenCode inside)
+cp .env.example apps/api/.env # fill in GitHub OAuth + NEBIUS_API_KEY etc.
+npm run dev                   # api :4000, web :3000, worker :4001
 ```
 
-- **Auth setup** (GitHub OAuth App, env vars, routes, verification):
-  [`docs/auth.md`](docs/auth.md)
-- Offline end-to-end auth check: `npm run verify:auth -w @kairo/api`
+- **Auth setup** (GitHub OAuth App, env vars, routes): [`docs/auth.md`](docs/auth.md)
+- **Model/provider notes:** [`docs/model-notes.md`](docs/model-notes.md)
+- **Refactor audit (OpenCode harness):** [`docs/refactor-opencode.md`](docs/refactor-opencode.md)
 
-## Using this example
+## Workspace layout
 
-Run the following command:
+| Path | What it is |
+| --- | --- |
+| `apps/api` | Express API: auth, runs, sessions/conversations, GitHub webhooks, SSE relay, LLM proxy |
+| `apps/worker` | BullMQ consumer: container lifecycle, OpenCode SDK adapter, event mapping, GitHub PR flow |
+| `apps/web` | Next.js console: agent chat, sidebar sessions, dashboard |
+| `packages/db` | Prisma schema + migrations (`ChatSession`, `Conversation`, `Message`, `AgentRun`, `AgentStep`, `Sandbox`, …) |
+| `packages/sandbox` | Docker workspace control (per-user networks/volumes, derived credentials, exec/archive) |
+| `packages/run-queue` | Queue name, job type, and `RunEvent` union shared by API + worker |
+| `sandbox/` | Dockerfile for the user workspace image (OpenCode, XDG dirs under `/workspace/.kairo`) |
+
+## Environment
+
+Shared keys live in `apps/api/.env` (see `.env.example`); the worker falls
+back to that file for `DATABASE_URL`, `REDIS_URL`, `SANDBOX_SECRET`,
+`TOKEN_ENCRYPTION_KEY`, and the LLM proxy/model settings. Notable vars:
+
+- `REDIS_URL` — BullMQ queue + SSE pub/sub (default `redis://127.0.0.1:6379`)
+- `SANDBOX_SECRET` — HMAC source for per-container OpenCode passwords and LLM proxy tokens
+- `NEBIUS_API_KEY` / `NEBIUS_BASE_URL` — OpenAI-compatible upstream behind the proxy
+- `OPENCODE_MODEL` / `LLM_MODEL_ALLOWLIST` — default model + what the proxy forwards (default `nvidia/nemotron-3.5-super-vl:free` on OpenRouter)
+- `LLM_PROXY_PORT` (4100), `RUN_TIMEOUT_MS` (worker, 10 min)
+
+## Commands
 
 ```sh
-npx create-turbo@latest
+npm run dev              # turbo: api + web + worker
+npm run build            # build all apps/packages
+npm run typecheck        # tsc across the monorepo
+npm run sandbox:build    # rebuild the workspace image
+npm run db:migrate -w @kairo/db
 ```
-
-## What's inside?
-
-This Turborepo includes the following packages/apps:
-
-### Apps and Packages
-
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `@next/eslint-plugin-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
-
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo build
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo build
-npm exec turbo build
-npm exec turbo build
-```
-
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo build --filter=docs
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo build --filter=docs
-npm exec turbo build --filter=docs
-npm exec turbo build --filter=docs
-```
-
-### Develop
-
-To develop all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo dev
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo dev
-npm exec turbo dev
-npm exec turbo dev
-```
-
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo dev --filter=web
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo dev --filter=web
-npm exec turbo dev --filter=web
-npm exec turbo dev --filter=web
-```
-
-### Remote Caching
-
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo login
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo login
-npm exec turbo login
-npm exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-npm exec turbo link
-npm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)

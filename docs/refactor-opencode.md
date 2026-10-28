@@ -1,5 +1,9 @@
 # R1 audit — OpenCode harness refactor (`refactor/opencode-harness`)
 
+> **Status: COMPLETE** (R1–R6 committed; live smoke testing was run locally and
+> is summarized at the bottom). Goal achieved: `@kairo/agent` is gone; OpenCode
+> runs inside each user's sandbox container and the API/worker only orchestrate.
+
 Goal: replace the custom LLM loop (`@kairo/agent`) with **OpenCode running inside each
 user's sandbox container**; API/worker only orchestrate. OpenCode version pinned:
 `opencode-ai@1.19.5` / `@opencode-ai/sdk@1.19.5`.
@@ -89,9 +93,25 @@ Legend: **KEEP** (unchanged), **REWRITE** (same responsibility, new mechanism),
 | `LLM_PROXY_PORT`, `LLM_PROXY_HOST`, `LLM_PROXY_URL` (in-container base) | NEW |
 | `OPENCODE_MODEL` / allowlist | NEW — default model passed to OpenCode + proxy allowlist |
 
-## Deleted lines accounting (updated at R7)
+## Deleted lines accounting (final, vs `main`)
 
-- `packages/agent/**`: whole package (15 source files).
-- `apps/api`: executor.ts (160), registry.ts (95), runs.ts inline-run parts (rewritten).
-- `packages/sandbox`: Workspace contract + agent-facing methods (~250 lines).
-- `apps/web`: plan/replan UI (~60 lines).
+- `packages/agent/**` — entire package deleted: **2,715 lines** across 19 files
+  (loop 520, local workspace 494, offline-check 437, model-check 205,
+  executors 201, try CLI 164, …).
+- `apps/api` — `executor.ts` (−160), `registry.ts` (−95); `routes/runs.ts`
+  rewritten queue-first (−142/+151).
+- `packages/sandbox` — Workspace contract + agent-facing `listFiles`/`searchCode`
+  removed (−176/+154 net in `sandbox.ts`), `cli/verify.ts` slimmed (−20).
+- `apps/web` — plan/replan UI removed; `agent/page.tsx` and `use-run.ts`
+  rewritten for the RunEvent union (net −164 in those two files' old logic).
+- Whole branch: 81 files changed, **+8,934 / −3,749** (includes new
+  `apps/worker`, `packages/run-queue`, LLM proxy, sessions UI).
+
+## Live verification notes
+
+- Container image: `opencode serve --hostname 0.0.0.0 --port 4096` with
+  `OPENCODE_SERVER_PASSWORD` basic auth; `/global/health` → `{"healthy":true,"version":"1.19.5"}`.
+- `OPENCODE_CONFIG=/workspace/.kairo/config/opencode.json` is read (proven via
+  deliberate parse error); all XDG dirs resolve under `/workspace/.kairo/*`.
+- Worker env fallback (`apps/api/.env`) path had a one-level-too-high resolve
+  bug (`env.ts`) — fixed during the smoke run.
