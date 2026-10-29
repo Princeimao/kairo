@@ -10,6 +10,7 @@ import { requireAuth } from "./middleware/auth.js";
 import { authRateLimiter } from "./middleware/rate-limit.js";
 import { authRouter } from "./routes/auth.js";
 import { runRouter } from "./routes/runs.js";
+import { actionsRouter } from "./routes/actions.js";
 import { sandboxRouter } from "./routes/sandbox.js";
 import { githubRouter, githubWebhookRouter } from "./routes/github.js";
 import { conversationRouter, sessionRouter } from "./routes/sessions.js";
@@ -40,6 +41,7 @@ app.get("/health", (_req, res) => {
 
 app.use("/auth", authRateLimiter, authRouter);
 app.use("/runs", runRouter);
+app.use("/internal/actions", actionsRouter);
 app.use("/sessions", sessionRouter);
 app.use("/conversations", conversationRouter);
 app.use("/sandbox", sandboxRouter);

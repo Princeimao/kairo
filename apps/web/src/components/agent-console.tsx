@@ -11,12 +11,22 @@ import {
   Ban,
   GitPullRequestArrow,
   PencilLine,
+  GitBranch,
+  X,
+  HelpCircle,
 } from "lucide-react";
 import PromptBar, { type PromptBarSendDetail } from "@/components/PromptBar";
 import ThoughtLine from "@/components/ThoughtLine";
 import { announceRun } from "@/lib/use-sessions";
 import { useRunStream } from "@/lib/use-run";
-import { conversations, runs, type ConversationMessage } from "@/lib/api";
+import {
+  ApiError,
+  conversations,
+  github,
+  runs,
+  type ConversationMessage,
+  type GithubRepoItem,
+} from "@/lib/api";
 import { useSearchParams, useRouter } from "next/navigation";
 
 const COMMANDS = [
@@ -31,10 +41,13 @@ const SOURCES = [
   {
     key: "repo",
     name: "GitHub repo",
-    description: "Your repositories",
-    attach: false,
+    description: "Attach one of your repositories",
+    attach: true,
   },
 ];
+
+const REPO_FULL_NAME_RE = /^[\w.-]+\/[\w.-]+$/;
+const NEGATIVE_REPLY_RE = /^\s*(no|n|nope|deny|declined?|reject(ed)?|cancel)\b/i;
 
 export function AgentConsole({
   conversationId,
@@ -61,6 +74,15 @@ export function AgentConsole({
   const [loadingHistory, setLoadingHistory] = useState(false);
   const resumedRunRef = useRef<string | null>(null);
   const loadedConversationRef = useRef<string | null>(null);
+  const [repoPickerOpen, setRepoPickerOpen] = useState(false);
+  const [repoList, setRepoList] = useState<GithubRepoItem[] | null>(null);
+  const [repoError, setRepoError] = useState<string | null>(null);
+  const attachResolveRef = useRef<((files?: string | string[]) => void) | null>(
+    null,
+  );
+  const [answering, setAnswering] = useState(false);
+  const [askNote, setAskNote] = useState("");
+  const [answerError, setAnswerError] = useState<string | null>(null);
 
   const working = view.status === "QUEUED" || view.status === "RUNNING";
   const toolLines = view.tools;
@@ -203,10 +225,83 @@ export function AgentConsole({
     }
   }, [view.status, view.summary, runIdRef]);
 
+  // ── Repo picker (PromptBar "@GitHub repo" source → attach chip) ──────
+  const openRepoPicker = useCallback(() => {
+    attachResolveRef.current?.();
+    attachResolveRef.current = null;
+    setRepoPickerOpen(true);
+    setRepoList(null);
+    setRepoError(null);
+    github
+      .repos()
+      .then((repos) => setRepoList(repos))
+      .catch((error: unknown) => {
+        setRepoError(
+          error instanceof ApiError
+            ? error.message
+            : "Could not load your repositories",
+        );
+        setRepoList([]);
+      });
+  }, []);
+
+  const closeRepoPicker = useCallback(() => {
+    setRepoPickerOpen(false);
+    attachResolveRef.current?.();
+    attachResolveRef.current = null;
+  }, []);
+
+  const pickRepo = useCallback((fullName: string) => {
+    setRepoPickerOpen(false);
+    const resolve = attachResolveRef.current;
+    attachResolveRef.current = null;
+    resolve?.(fullName);
+  }, []);
+
+  /** PromptBar calls this when the user picks the repo source; we open our own
+   * picker and resolve with the chosen owner/repo (it becomes an attachment
+   * chip, and onSend passes it along as repoFullName). */
+  const onAttach = useCallback((): Promise<string | string[] | void> => {
+    openRepoPicker();
+    return new Promise<string | string[] | void>((resolve) => {
+      attachResolveRef.current = resolve;
+    });
+  }, [openRepoPicker]);
+
+  // ── Ask answers (Approve / Decline / options / free-text) ────────────
+  const answerAsk = useCallback(
+    (payload: { approved: boolean; note?: string }) => {
+      const ask = view.ask;
+      const runId = runIdRef.current;
+      if (!ask || !runId || answering) return;
+      setAnswering(true);
+      setAnswerError(null);
+      runs
+        .answer(runId, { askId: ask.askId, ...payload })
+        .then(() => {
+          setView((prev) => ({ ...prev, ask: null }));
+          setAskNote("");
+        })
+        .catch((error: unknown) => {
+          setAnswerError(
+            error instanceof ApiError
+              ? error.message
+              : "Could not send your answer",
+          );
+        })
+        .finally(() => setAnswering(false));
+    },
+    [view.ask, answering, runIdRef, setView],
+  );
+
   const onSend = useCallback(
     (text: string, detail: PromptBarSendDetail) => {
       const mode = text.trim().startsWith("/fix") ? "FIX" : "CREATE";
       const cleaned = text.replace(/^\/\w+\s*/g, "").trim();
+      const repoFullName =
+        detail.attachments
+          .map((attachment) => attachment.trim())
+          .find((attachment) => REPO_FULL_NAME_RE.test(attachment)) ?? undefined;
       setDraftTask(null);
       setHistory((prev) => [
         ...prev,
@@ -219,14 +314,14 @@ export function AgentConsole({
         },
       ]);
       if (conversationId !== null) {
-        void sendToConversation(conversationId, cleaned, mode).then(
+        void sendToConversation(conversationId, cleaned, mode, repoFullName).then(
           (created) => {
             if (created) announceRun();
           },
         );
       } else {
         runIdRef.current = null;
-        void start(cleaned, mode).then((created) => {
+        void start(cleaned, mode, repoFullName).then((created) => {
           runIdRef.current = created?.runId ?? null;
           if (created) {
             announceRun();
@@ -236,7 +331,6 @@ export function AgentConsole({
           }
         });
       }
-      void detail;
     },
     [start, sendToConversation, conversationId, runIdRef, router],
   );
@@ -407,6 +501,84 @@ export function AgentConsole({
               </div>
             )}
 
+            {view.ask && working && (
+              <div className="stream-row rounded-2xl border border-orange-300/70 bg-orange-50/70 p-4 shadow-sm">
+                <div className="flex items-center gap-2 text-sm font-medium text-orange-700">
+                  <HelpCircle className="size-4" />
+                  Kairo needs your answer
+                  {answering && (
+                    <Loader2 className="size-3.5 animate-spin text-orange-500" />
+                  )}
+                </div>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-neutral-800">
+                  {view.ask.question}
+                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {view.ask.options?.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      disabled={answering}
+                      onClick={() =>
+                        answerAsk({
+                          approved: !NEGATIVE_REPLY_RE.test(option),
+                          note: option,
+                        })
+                      }
+                      className="cursor-pointer rounded-full border border-orange-300 bg-white px-3 py-1 text-xs font-medium text-orange-700 transition-colors hover:bg-orange-100 disabled:opacity-50"
+                    >
+                      {option}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    disabled={answering}
+                    onClick={() => answerAsk({ approved: true })}
+                    className="cursor-pointer rounded-full bg-emerald-500 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-emerald-400 disabled:opacity-50"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    disabled={answering}
+                    onClick={() => answerAsk({ approved: false })}
+                    className="cursor-pointer rounded-full bg-white px-3 py-1 text-xs font-medium text-neutral-500 ring-1 ring-neutral-300 transition-colors hover:text-neutral-700 disabled:opacity-50"
+                  >
+                    Decline
+                  </button>
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <input
+                    value={askNote}
+                    onChange={(event) => setAskNote(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        const note = askNote.trim();
+                        answerAsk({ approved: true, ...(note ? { note } : {}) });
+                      }
+                    }}
+                    placeholder="or type a reply…"
+                    disabled={answering}
+                    className="min-w-0 flex-1 rounded-xl border border-orange-200 bg-white px-3 py-1.5 text-sm text-neutral-800 outline-none transition-colors placeholder:text-neutral-400 focus:border-orange-400"
+                  />
+                  <button
+                    type="button"
+                    disabled={answering}
+                    onClick={() => {
+                      const note = askNote.trim();
+                      answerAsk({ approved: true, ...(note ? { note } : {}) });
+                    }}
+                    className="cursor-pointer rounded-xl bg-orange-500 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
+                  >
+                    reply
+                  </button>
+                </div>
+                {answerError && (
+                  <p className="mt-2 text-xs text-red-500">{answerError}</p>
+                )}
+              </div>
+            )}
+
             {view.summary && view.status === "SUCCEEDED" && (
               <div className="stream-row rounded-2xl border border-emerald-200/70 bg-emerald-50/40 p-5 shadow-sm">
                 <div className="mb-2 flex items-center gap-2 text-sm font-medium">
@@ -520,27 +692,87 @@ export function AgentConsole({
               )}
             </div>
           )}
-          <PromptBar
-            className="border rounded-3xl"
-            placeholder={
-              working
-                ? "agent is busy wait for the run to finish"
-                : "describe a task, e.g. /fix flaky login test"
-            }
-            sources={SOURCES}
-            commands={COMMANDS}
-            models={[]}
-            efforts={[]}
-            busy={working}
-            onSend={onSend}
-            onStop={onStop}
-            width={720}
-            radius={20}
-            background="#ffffff"
-            color="#171717"
-            menuBackground="#ffffff"
-            sparkColor="#f97316"
-          />
+          <div className="relative">
+            {repoPickerOpen && (
+              <div className="absolute bottom-full left-0 z-30 mb-2 w-full max-w-xs overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-lg">
+                <div className="flex items-center justify-between border-b border-neutral-100 px-3 py-2">
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-neutral-500">
+                    <GitBranch className="size-3.5" />
+                    Attach a repository
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Close repository picker"
+                    onClick={closeRepoPicker}
+                    className="cursor-pointer text-neutral-400 transition-colors hover:text-neutral-600"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+                <div className="max-h-64 overflow-y-auto p-1.5">
+                  {repoError && (
+                    <p className="px-2.5 py-3 text-xs text-red-500">
+                      {repoError}
+                    </p>
+                  )}
+                  {!repoError && repoList === null && (
+                    <div className="flex items-center gap-2 px-2.5 py-3 text-xs text-neutral-400">
+                      <Loader2 className="size-3.5 animate-spin" />
+                      loading repositories…
+                    </div>
+                  )}
+                  {!repoError &&
+                    repoList !== null &&
+                    repoList.length === 0 && (
+                      <p className="px-2.5 py-3 text-xs text-neutral-400">
+                        No repositories found.
+                      </p>
+                    )}
+                  {repoList?.map((repo) => (
+                    <button
+                      key={repo.fullName}
+                      type="button"
+                      onClick={() => pickRepo(repo.fullName)}
+                      className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-left text-sm text-neutral-700 transition-colors hover:bg-orange-50"
+                    >
+                      <span className="truncate font-mono text-[13px]">
+                        {repo.fullName}
+                      </span>
+                      <span className="shrink-0 text-[10px] uppercase tracking-wide text-neutral-400">
+                        {repo.push
+                          ? repo.private
+                            ? "private"
+                            : "public"
+                          : "read-only"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <PromptBar
+              className="border rounded-3xl"
+              placeholder={
+                working
+                  ? "agent is busy wait for the run to finish"
+                  : "describe a task, e.g. /fix flaky login test"
+              }
+              sources={SOURCES}
+              commands={COMMANDS}
+              models={[]}
+              efforts={[]}
+              busy={working}
+              onSend={onSend}
+              onStop={onStop}
+              onAttach={onAttach}
+              width={720}
+              radius={20}
+              background="#ffffff"
+              color="#171717"
+              menuBackground="#ffffff"
+              sparkColor="#f97316"
+            />
+          </div>
         </div>
       </div>
     </div>

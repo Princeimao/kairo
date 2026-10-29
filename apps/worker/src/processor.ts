@@ -11,6 +11,8 @@ import {
 } from "@kairo/sandbox";
 import {
   createRedis,
+  runAskKey,
+  runAskPendingKey,
   runCancelKey,
   type RunEvent,
   type RunJobData,
@@ -23,6 +25,7 @@ import { PartThrottle, StepEmitter, maxSeqFor } from "./publish.js";
 import { GithubFlowError, githubFinish, githubPrepare } from "./github.js";
 
 const CANCEL_POLL_MS = 1_500;
+const ASK_POLL_MS = 500;
 const HEALTH_TIMEOUT_MS = 90_000;
 const MAX_SUMMARY_CHARS = 100_000;
 const STALL_WARN_MS = 30_000;
@@ -360,6 +363,43 @@ async function runOnce(
     }
   })();
 
+  // The agent asks the user via POST /internal/actions/ask, which parks a
+  // pending askId in Redis. This loop turns it into a persisted `ask` event so
+  // the UI (and SSE reconnects) show the question while the agent blocks on
+  // its long-poll. Emitted once per askId until the answer clears the marker.
+  const seenAsks = new Set<string>();
+  const askPoll = (async () => {
+    while (!disposed) {
+      try {
+        const askId = await redis.get(runAskPendingKey(run.id));
+        if (askId !== null && !seenAsks.has(askId)) {
+          const raw = await redis.get(runAskKey(run.id, askId));
+          if (raw !== null) {
+            const parsed = JSON.parse(raw) as { question?: unknown; options?: unknown };
+            const question =
+              typeof parsed.question === "string" && parsed.question !== ""
+                ? parsed.question
+                : "The agent has a question for you.";
+            const options = Array.isArray(parsed.options)
+              ? parsed.options.filter((o): o is string => typeof o === "string")
+              : [];
+            seenAsks.add(askId);
+            emitter.emit({
+              type: "ask",
+              askId,
+              question,
+              options: options.length > 0 ? options : undefined,
+            });
+            log(run.id, `ask pending emitted: ${askId}`);
+          }
+        }
+      } catch (error) {
+        log(run.id, `ask poll error: ${errorText(error)}`);
+      }
+      await sleep(ASK_POLL_MS);
+    }
+  })();
+
   // THE actual prompt. Without this the run waits forever for session.idle.
   const promptText = buildPrompt(run);
   log(
@@ -419,6 +459,7 @@ async function runOnce(
   ]);
   disposed = true;
   if (timeoutHandle) clearTimeout(timeoutHandle);
+  await askPoll.catch(() => undefined);
   log(
     run.id,
     `wait over: raced=${raced} sawAny=${sawAnyEvent} matched=${matchedEvents} otherSession=${droppedOtherSession}`,

@@ -1,4 +1,6 @@
-import { env } from "../config/env.js";
+import { prisma } from "@kairo/db";
+import { env, encryptionKey } from "../config/env.js";
+import { decryptSecret } from "./crypto.js";
 
 // GitHub Apps do not accept a `scope` query parameter (permissions are defined
 // in the App settings); classic OAuth Apps take a space-separated list here.
@@ -210,4 +212,45 @@ export async function fetchPrimaryEmail(
     null;
 
   return chosen?.email ?? null;
+}
+
+/** Decrypted OAuth token for a user (null when GitHub is not connected). */
+export async function userAccessToken(userId: string): Promise<string | null> {
+  const connection = await prisma.githubConnection.findUnique({ where: { userId } });
+  if (connection === null) return null;
+  try {
+    return decryptSecret(connection.accessTokenEncrypted, encryptionKey);
+  } catch {
+    return null;
+  }
+}
+
+/** Authenticated GitHub REST call; throws GitHubApiError (with status) on !ok. */
+export async function githubJson<T = unknown>(
+  token: string,
+  method: "GET" | "POST",
+  path: string,
+  body?: unknown,
+): Promise<T> {
+  const response = await fetch(`${env.GITHUB_API_URL}${path}`, {
+    method,
+    headers: {
+      authorization: `Bearer ${token}`,
+      accept: "application/vnd.github+json",
+      "user-agent": "Kairo",
+      "x-github-api-version": GITHUB_API_VERSION,
+      ...(body !== undefined ? { "content-type": "application/json" } : {}),
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
+  const json = (await response.json().catch(() => null)) as T;
+  if (!response.ok) {
+    const message =
+      json && typeof json === "object" && "message" in json
+        ? String((json as { message: unknown }).message)
+        : `HTTP ${response.status}`;
+    throw new GitHubApiError(`GitHub ${method} ${path} failed: ${message}`, response.status);
+  }
+  return json;
 }

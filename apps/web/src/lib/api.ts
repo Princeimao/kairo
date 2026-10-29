@@ -28,6 +28,13 @@ export type AgentEvent =
   | { type: "edit"; path: string; state?: "running" | "done" | "error" }
   | { type: "error"; code: string; message: string }
   | {
+      /** The agent is waiting for the user to answer (Approve/Decline/reply). */
+      type: "ask";
+      askId: string;
+      question: string;
+      options?: string[];
+    }
+  | {
       type: "done";
       status: "SUCCEEDED" | "FAILED" | "CANCELLED";
       summary: string;
@@ -188,6 +195,16 @@ export const runs = {
   cancel: (id: string) =>
     apiFetch<{ ok: boolean }>(`/runs/${id}/cancel`, { method: "POST" }),
 
+  /** Reply to a pending `ask` event (Approve / Decline / free-text note). */
+  answer: (
+    id: string,
+    input: { askId: string; approved: boolean; note?: string },
+  ) =>
+    apiFetch<{ ok: boolean }>(`/runs/${id}/answers`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+
   /** SSE endpoint (same-origin via the /api rewrite, cookies flow with it). */
   eventsUrl: (id: string) => `/api/runs/${id}/events`,
 };
@@ -237,6 +254,20 @@ export const github = {
     apiFetch<{ events: GithubEventItem[] }>("/github/events").then(
       (r) => r.events,
     ),
+
+  /** The user's repositories for the composer's repo picker. */
+  repos: () =>
+    apiFetch<{ repos: GithubRepoItem[] }>("/github/repos").then(
+      (r) => r.repos,
+    ),
+};
+
+export type GithubRepoItem = {
+  fullName: string;
+  private: boolean;
+  fork: boolean;
+  push: boolean;
+  defaultBranch: string;
 };
 
 export type GithubEventItem = {

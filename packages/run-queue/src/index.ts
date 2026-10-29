@@ -22,6 +22,13 @@ export type RunEvent =
   | { type: "edit"; path: string; state?: "running" | "done" | "error" }
   | { type: "error"; code: string; message: string }
   | {
+      /** Agent is waiting for the user to answer a question (POST /internal/actions/ask). */
+      type: "ask";
+      askId: string;
+      question: string;
+      options?: string[];
+    }
+  | {
       type: "done";
       status: "SUCCEEDED" | "FAILED" | "CANCELLED";
       summary: string;
@@ -50,6 +57,21 @@ export function runSeqKey(runId: string): string {
 
 export function runCancelKey(runId: string): string {
   return `run:${runId}:cancel`;
+}
+
+/** Pending askId for a run (set by POST /internal/actions/ask, cleared on answer). */
+export function runAskPendingKey(runId: string): string {
+  return `run:${runId}:ask:pending`;
+}
+
+/** Ask record JSON {question, options, createdAt} (kept 24h so push can re-verify). */
+export function runAskKey(runId: string, askId: string): string {
+  return `run:${runId}:ask:${askId}`;
+}
+
+/** Answer JSON {approved, note, at} written by POST /runs/:id/answers. */
+export function runAskAnswerKey(runId: string, askId: string): string {
+  return `run:${runId}:ask:answer:${askId}`;
 }
 
 export interface PublishedStep {

@@ -27,6 +27,7 @@ export type RunView = {
   tokensIn: number | null;
   tokensOut: number | null;
   error: { code: string; message: string } | null;
+  ask: { askId: string; question: string; options?: string[] } | null;
 };
 
 const EMPTY: RunView = {
@@ -44,6 +45,7 @@ const EMPTY: RunView = {
   tokensIn: null,
   tokensOut: null,
   error: null,
+  ask: null,
 };
 
 function outputToText(output: unknown): string | null {
@@ -141,6 +143,16 @@ export function useRunStream() {
               ...prev,
               error: { code: event.code, message: event.message },
             };
+          case "ask":
+            return {
+              ...prev,
+              status: "RUNNING",
+              ask: {
+                askId: event.askId,
+                question: event.question,
+                options: event.options,
+              },
+            };
           case "done":
             return {
               ...prev,
@@ -152,6 +164,7 @@ export function useRunStream() {
               streamingText: null,
               streamingReasoning: null,
               error: event.error ?? prev.error,
+              ask: null,
             };
           default:
             return prev;
@@ -192,11 +205,15 @@ export function useRunStream() {
 
   /** Start a brand-new conversation + run (POST /runs). */
   const start = useCallback(
-    async (prompt: string, mode: "CREATE" | "FIX" = "CREATE") => {
+    async (
+      prompt: string,
+      mode: "CREATE" | "FIX" = "CREATE",
+      repoFullName?: string,
+    ) => {
       close();
       setView({ ...EMPTY, prompt, status: "QUEUED" });
       try {
-        const created = await runs.create({ prompt, mode });
+        const created = await runs.create({ prompt, mode, repoFullName });
         runIdRef.current = created.runId;
         openStream(created.runId);
         return created;
@@ -230,6 +247,7 @@ export function useRunStream() {
       conversationId: string,
       prompt: string,
       mode: "CREATE" | "FIX" = "CREATE",
+      repoFullName?: string,
     ) => {
       close();
       setView({ ...EMPTY, prompt, status: "QUEUED" });
@@ -237,6 +255,7 @@ export function useRunStream() {
         const created = await conversations.message(conversationId, {
           prompt,
           mode,
+          repoFullName,
         });
         runIdRef.current = created.runId;
         openStream(created.runId);

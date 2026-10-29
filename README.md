@@ -26,9 +26,24 @@ web (:3000) ──► api (:4000) ──► BullMQ (redis) ──► worker
   provider pointing at `http://host.docker.internal:4100/internal/llm/v1`;
   requests carry a per-container bearer token (HMAC-derived, only the hash is
   stored) and are checked against the active run + model allowlist.
-- **GitHub:** when a run has a `repoFullName`, the worker clones with the
-  user's stored GitHub token, and on success pushes a `kairo/<runId>` branch
-  and opens a pull request from the reply summary.
+- **GitHub:**
+  - *Attached repo* (compose-box repo picker → `repoFullName`): the worker
+    clones with the stored token, the agent edits `/workspace/repo`, then the
+    worker pushes `kairo/<runId>` and opens a PR from the reply summary.
+    Read-only access falls back to a fork + cross-repo PR.
+  - *Fresh publish* (no attached repo): the agent asks for approval, then
+    calls `POST /internal/actions/github/push`, which creates the repository
+    and pushes `/workspace/repo` host-side. Walked through by the
+    `github-publish` skill the harness writes into every workspace.
+- **Asking the user:** `POST /internal/actions/ask` (sandbox bearer token,
+  i.e. `$KAIRO_LLM_TOKEN` from the container) blocks up to 15 min until
+  `POST /runs/:id/answers` writes the reply. The worker polls the pending
+  marker and emits an `ask` SSE event, so the console shows the question with
+  Approve / Decline / option / free-text reply while the agent waits.
+- **Skills:** the worker writes `/workspace/.kairo/skills/*/SKILL.md`
+  (`github-publish`, `software-engineer`) and enables them via OpenCode's
+  `skills` config key; skill/config changes restart the container once so the
+  server picks them up.
 
 ## Quick start
 

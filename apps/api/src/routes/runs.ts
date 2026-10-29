@@ -1,6 +1,11 @@
 import { Router, type Request } from "express";
 import { z } from "zod";
 import { prisma } from "@kairo/db";
+import {
+  createRedis,
+  runAskAnswerKey,
+  runAskPendingKey,
+} from "@kairo/run-queue";
 import { AppError } from "../middleware/error-handler.js";
 import { requireAuth } from "../middleware/auth.js";
 import { startRun } from "../lib/sessions.js";
@@ -160,6 +165,57 @@ runRouter.post("/:id/cancel", requireAuth, async (req, res, next) => {
       });
     }
     res.json({ ok: true, cancelling: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /runs/:id/answers {askId, approved, note?} — the UI's reply to a
+ * pending `ask` event. Writes the answer key the worker/agent long-poll reads;
+ * the pending marker is cleared so the question cannot be answered twice.
+ */
+runRouter.post("/:id/answers", requireAuth, async (req, res, next) => {
+  try {
+    const run = await loadOwnedRun(
+      runIdFromParams(req),
+      authenticatedUser(req),
+    );
+    if (isTerminalStatus(run.status)) {
+      throw new AppError(409, "Run already finished");
+    }
+    const body = z
+      .object({
+        askId: z.string().trim().min(1).max(64),
+        approved: z.boolean(),
+        note: z.string().trim().max(4_000).optional(),
+      })
+      .safeParse(req.body);
+    if (!body.success) {
+      throw new AppError(400, "askId and approved are required");
+    }
+
+    const redis = createRedis();
+    try {
+      const pending = await redis.get(runAskPendingKey(run.id));
+      if (pending !== body.data.askId) {
+        throw new AppError(409, "No matching pending question for this run");
+      }
+      await redis.set(
+        runAskAnswerKey(run.id, body.data.askId),
+        JSON.stringify({
+          approved: body.data.approved,
+          note: body.data.note ?? null,
+          at: new Date().toISOString(),
+        }),
+        "EX",
+        60 * 60 * 24,
+      );
+      await redis.del(runAskPendingKey(run.id));
+    } finally {
+      redis.disconnect();
+    }
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }

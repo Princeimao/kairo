@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { Prisma, prisma } from "@kairo/db";
 import { env } from "../config/env.js";
 import { requireAuth } from "../middleware/auth.js";
+import { GitHubApiError, githubJson, userAccessToken } from "../lib/github.js";
 
 /** Routes mounted under /github (raw-body webhook router + JSON event list). */
 export const githubWebhookRouter = Router();
@@ -146,4 +147,59 @@ githubRouter.get("/events", requireAuth, async (req, res, next) => {
 
 githubRouter.get("/", requireAuth, async (_req, res) => {
   res.json({ ok: true });
+});
+
+type GithubRepoRow = {
+  full_name?: unknown;
+  private?: unknown;
+  fork?: unknown;
+  default_branch?: unknown;
+  permissions?: { push?: unknown } | null;
+};
+
+/** The user's repositories, for the composer's repo picker (attach before a run). */
+githubRouter.get("/repos", requireAuth, async (req, res, next) => {
+  try {
+    const token = await userAccessToken(req.auth!.user.id);
+    if (token === null) {
+      res.status(400).json({ error: "GitHub is not connected for this account" });
+      return;
+    }
+    let rows: GithubRepoRow[];
+    try {
+      const raw = await githubJson<GithubRepoRow[]>(
+        token,
+        "GET",
+        "/user/repos?per_page=100&sort=full_name&affiliation=owner,collaborator,organization_member",
+      );
+      rows = Array.isArray(raw) ? raw : [];
+    } catch (error) {
+      if (error instanceof GitHubApiError) {
+        res
+          .status(error.status === 401 ? 502 : (error.status ?? 502))
+          .json({
+            error:
+              error.status === 401
+                ? "GitHub token expired or revoked — reconnect GitHub to list repositories"
+                : `GitHub: ${error.message}`,
+          });
+        return;
+      }
+      throw error;
+    }
+    res.json({
+      repos: rows
+        .filter((row) => typeof row.full_name === "string")
+        .map((row) => ({
+          fullName: row.full_name as string,
+          private: row.private === true,
+          fork: row.fork === true,
+          push: row.permissions?.push === true,
+          defaultBranch:
+            typeof row.default_branch === "string" ? row.default_branch : "main",
+        })),
+    });
+  } catch (err) {
+    next(err);
+  }
 });

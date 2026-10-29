@@ -33,6 +33,10 @@ function basic(token: string): string {
   return Buffer.from(`x-access-token:${token}`).toString("base64");
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function gh(
   token: string,
   method: "GET" | "POST",
@@ -83,7 +87,8 @@ export async function githubPrepare(ws: DockerWorkspace, repoFullName: string, u
 
 /**
  * Bundle-and-push after the run + PR creation with OpenCode's final summary
- * as the body. Returns the PR URL.
+ * as the body. Returns the PR URL. When the user cannot push to the base
+ * repository, the branch goes to their fork and the PR is opened cross-repo.
  */
 export async function githubFinish(
   ws: DockerWorkspace,
@@ -97,12 +102,44 @@ export async function githubFinish(
   const auth = basic(token);
   const branch = `kairo/${run.id}`;
 
+  const repository = await gh(token, "GET", `/repos/${run.repoFullName}`);
+  const base =
+    typeof repository.default_branch === "string" ? repository.default_branch : "main";
+  const canPush =
+    (repository.permissions as { push?: unknown } | undefined)?.push === true;
+
+  // Read-only access → fork first, push there, open the PR across repos.
+  let pushTarget = "origin";
+  let head = branch;
+  if (!canPush) {
+    const fork = await gh(token, "POST", `/repos/${run.repoFullName}/forks`, {});
+    const forkFullName = typeof fork.full_name === "string" ? fork.full_name : null;
+    if (forkFullName === null) {
+      throw new GithubFlowError("fork request returned no full_name");
+    }
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      try {
+        await gh(token, "GET", `/repos/${forkFullName}`);
+        break;
+      } catch (error) {
+        if (attempt === 29) {
+          throw new GithubFlowError(
+            `fork ${forkFullName} never became ready: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+        await sleep(1_000);
+      }
+    }
+    pushTarget = `https://github.com/${forkFullName}.git`;
+    head = `${forkFullName.split("/")[0]}:${branch}`;
+  }
+
   const commitMessage = `Kairo run ${run.id}`;
   const commands = [
     `git checkout -b ${branch}`,
     "git add -A",
     `git commit -m ${JSON.stringify(commitMessage)} -m ${JSON.stringify(summary.slice(0, 5_000))} || echo "nothing to commit"`,
-    `git -c http.extraHeader="AUTHORIZATION: basic ${auth}" push --set-upstream origin ${branch}`,
+    `git -c http.extraHeader="AUTHORIZATION: basic ${auth}" push --set-upstream ${pushTarget} ${branch}`,
   ];
   for (const command of commands) {
     const result = await ws.exec(command, { cwd: "repo", timeoutMs: 120_000 });
@@ -115,11 +152,9 @@ export async function githubFinish(
     }
   }
 
-  const repository = await gh(token, "GET", `/repos/${run.repoFullName}`);
-  const base = typeof repository.default_branch === "string" ? repository.default_branch : "main";
   const pull = await gh(token, "POST", `/repos/${run.repoFullName}/pulls`, {
     title: `Kairo: ${run.prompt.replace(/\s+/g, " ").trim().slice(0, 60)}`,
-    head: branch,
+    head,
     base,
     body: summary.slice(0, 60_000) || "Automated change by Kairo.",
   });

@@ -59,7 +59,12 @@ function deny(res: Response, status: number, code: string, message: string): voi
   res.status(status).json({ error: { message, type: code } });
 }
 
-async function authenticate(req: Request): Promise<Authed | null> {
+/**
+ * Proves a request carries a valid per-container sandbox token: bearer →
+ * Sandbox row → container running → active run. Shared with
+ * /internal/actions/* (same trust model as the LLM proxy).
+ */
+export async function authenticate(req: Request): Promise<Authed | null> {
   const header = req.get("authorization") ?? "";
   const token = header.toLowerCase().startsWith("bearer ")
     ? header.slice(7).trim()
