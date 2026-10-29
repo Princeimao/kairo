@@ -24,7 +24,12 @@ import {
   fetchProfile,
   GitHubApiError,
 } from "../lib/github.js";
-import { createSession, destroySession } from "../lib/session.js";
+import {
+  createSession,
+  destroySession,
+  lookupSession,
+  rotateSession,
+} from "../lib/session.js";
 import { requireAuth } from "../middleware/auth.js";
 import { AppError } from "../middleware/error-handler.js";
 import { oauthStartRateLimiter } from "../middleware/rate-limit.js";
@@ -231,6 +236,33 @@ authRouter.post("/logout", async (req, res, next) => {
     }
     clearSessionCookie(res);
     res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── Refresh (token rotation) ────────────────────────────────────────
+// Issues a brand-new opaque token for the current session and re-sets the
+// cookie with a full TTL, so active users never age out. The old token stops
+// matching immediately; a stale in-flight request may still 401 once (unknown
+// tokens deliberately do NOT clear the cookie, so the fresh one survives).
+// The web app calls this on load, on tab focus, and every 6 hours.
+authRouter.post("/refresh", async (req, res, next) => {
+  try {
+    const token = readSessionCookie(req);
+    if (!token) {
+      throw new AppError(401, "Authentication required");
+    }
+
+    const lookup = await lookupSession(token);
+    if (lookup.status === "expired") clearSessionCookie(res);
+    if (lookup.status !== "active") {
+      throw new AppError(401, "Session is invalid or expired");
+    }
+
+    const rotated = await rotateSession(lookup.session.id);
+    setSessionCookie(res, rotated.token, rotated.expiresAt);
+    res.json({ ok: true, expiresAt: rotated.expiresAt });
   } catch (err) {
     next(err);
   }

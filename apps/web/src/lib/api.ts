@@ -161,6 +161,12 @@ export async function apiFetch<T>(
 export const auth = {
   me: () => apiFetch<{ user: PublicUser }>("/auth/me").then((r) => r.user),
 
+  /** Rotates the session token and re-sets the cookie (SessionRefresh keeps this on a timer). */
+  refresh: () =>
+    apiFetch<{ ok: boolean; expiresAt: string }>("/auth/refresh", {
+      method: "POST",
+    }),
+
   logout: () => apiFetch<{ ok: boolean }>("/auth/logout", { method: "POST" }),
 
   setOnboardingStep: (step: OnboardingStep) =>

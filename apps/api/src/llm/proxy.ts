@@ -55,6 +55,25 @@ interface Authed {
   runId: string;
 }
 
+/** OpenCode replays assistant turns with OpenRouter-style reasoning fields
+ * (`reasoning_content`, `reasoning`, `reasoning_details`). Upstreams that
+ * validate strictly (Groq returns 400 "property 'reasoning_content' is
+ * unsupported") reject the whole request on follow-up turns — drop the fields
+ * before forwarding; no provider needs them on input. */
+const REASONING_FIELDS = ["reasoning_content", "reasoning", "reasoning_details"];
+
+function stripReasoningFields(body: Record<string, unknown>): void {
+  const messages = body.messages;
+  if (!Array.isArray(messages)) return;
+  for (const entry of messages) {
+    if (entry === null || typeof entry !== "object") continue;
+    const message = entry as Record<string, unknown>;
+    for (const field of REASONING_FIELDS) {
+      delete message[field];
+    }
+  }
+}
+
 function deny(res: Response, status: number, code: string, message: string): void {
   res.status(status).json({ error: { message, type: code } });
 }
@@ -201,6 +220,8 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     deny(res, 400, "invalid_json", "request body is not JSON");
     return;
   }
+
+  stripReasoningFields(body);
 
   const model = typeof body.model === "string" ? body.model : "";
   if (!modelAllowlist().has(model)) {

@@ -96,6 +96,7 @@ NEXT_PUBLIC_API_URL=http://localhost:4000
 | `GET /auth/github` | – | Generates `state` + PKCE verifier, stores both in a 10-minute `httpOnly` cookie, redirects to GitHub with scopes `read:user user:email repo`. Rate limited: 10 / 15 min / IP. |
 | `GET /auth/github/callback` | – | Validates `state` against the cookie (constant-time), exchanges the code (with `code_verifier`), fetches `/user` + `/user/emails`, upserts `User`, stores the encrypted token in `GithubConnection`, creates a session, redirects to `/onboarding` (or `/dashboard` when `onboardingStep = DONE`). |
 | `POST /auth/logout` | optional | Deletes the current session row and clears the cookie. |
+| `POST /auth/refresh` | optional | Rotates the session token: invalidates the old token, issues a fresh 256-bit one, re-sets the cookie with a full TTL, responds `{ ok, expiresAt }`. Unknown tokens get a 401 **without** clearing the cookie (so a stale in-flight request right after rotation can't delete the fresh cookie); genuinely expired sessions are cleared. The web app calls it automatically on load, on tab focus, and every 6 h (`SessionRefresh`, throttled to one attempt / 5 min). |
 | `GET /auth/me` | required | `{ user: { id, username, name, email, avatarUrl, onboardingStep } }` |
 | `PATCH /auth/onboarding` | required | `{ step: "PROFILE" }` — validated with zod; only forward one-step transitions (`WELCOME → PROFILE → PERMISSIONS → DONE`, re-sending the current step is a no-op). |
 | `GET /protected` | required | Test route that proves session auth works and reports the granted scopes. |
@@ -113,7 +114,8 @@ stricter OAuth-start limit.
 | SHA-256 HMAC of that token (keyed with `SESSION_SECRET`) | `sessions.tokenHash` (unique). The raw token is never persisted. |
 | `state` + PKCE `code_verifier` | Cookie `kairo_oauth` — `httpOnly`, `SameSite=Lax`, 10-minute `Max-Age`, deleted in the callback. |
 | GitHub access token | `github_connections.accessToken_encrypted`, AES-256-GCM: `v1.<iv>.<tag>.<ciphertext>` (base64url), key from `TOKEN_ENCRYPTION_KEY`. |
-| Session expiry | `sessions.expiresAt`; slides forward to a full TTL when a session older than `SESSION_RENEW_INTERVAL_MINUTES` is used. |
+| Session expiry | `sessions.expiresAt`; slides forward to a full TTL when a session older than `SESSION_RENEW_INTERVAL_MINUTES` is used, and resets on every `POST /auth/refresh`. |
+| Rotated token | Same `sessions` row — `tokenHash` is overwritten with the HMAC of the new token (`rotateSession`); the old cookie stops matching immediately. |
 
 ### Post-login redirects (Next `proxy.ts`)
 
@@ -121,6 +123,11 @@ stricter OAuth-start limit.
 - session, `onboardingStep !== DONE` → `/onboarding`
 - session, `onboardingStep = DONE` → `/dashboard`
 - signed-in user visiting `/login` is sent to `/onboarding` or `/dashboard`
+
+The proxy's server-side `/auth/me` call may trigger a cookie renewal (sliding
+renewal or rotation) — `fetchMe` reads the upstream `Set-Cookie` and forwards
+it onto the Next response, otherwise the browser cookie would expire while the
+DB row keeps getting renewed.
 
 Login failures land on `/login?error=<code>` with `access_denied`,
 `state_mismatch`, `github_error`.

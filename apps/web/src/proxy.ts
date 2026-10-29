@@ -7,9 +7,32 @@ const SESSION_COOKIE = "kairo_session";
 type MeResponse = { user: { onboardingStep: string } };
 
 type MeResult =
-  | { status: "authenticated"; onboardingStep: string }
+  | { status: "authenticated"; onboardingStep: string; setCookies: string[] }
   | { status: "unauthenticated" }
   | { status: "unknown" };
+
+/**
+ * The API re-issues the session cookie on this call (sliding renewal, or a
+ * rotation from POST /auth/refresh). This fetch runs server-side, so the
+ * Set-Cookie never reaches the browser on its own — read it here and forward
+ * it onto the response we return, or the browser cookie expires while the DB
+ * row stays fresh and the user gets logged out despite being active.
+ */
+function readSetCookies(response: Response): string[] {
+  const headers = response.headers as Headers & {
+    getSetCookie?: () => string[];
+  };
+  if (typeof headers.getSetCookie === "function") return headers.getSetCookie();
+  const single = headers.get("set-cookie");
+  return single ? [single] : [];
+}
+
+function withSetCookies(response: NextResponse, setCookies: string[]): NextResponse {
+  for (const value of setCookies) {
+    response.headers.append("set-cookie", value);
+  }
+  return response;
+}
 
 /**
  * Server-side session check against the API. The cookie is forwarded as a
@@ -30,6 +53,7 @@ async function fetchMe(request: NextRequest): Promise<MeResult> {
       return {
         status: "authenticated",
         onboardingStep: data.user.onboardingStep,
+        setCookies: readSetCookies(response),
       };
     }
     if (response.status === 401) return { status: "unauthenticated" };
@@ -52,7 +76,10 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     if (result.status !== "authenticated") return NextResponse.next();
 
     const target = result.onboardingStep === "DONE" ? "/dashboard" : "/onboarding";
-    return NextResponse.redirect(new URL(target, request.url));
+    return withSetCookies(
+      NextResponse.redirect(new URL(target, request.url)),
+      result.setCookies,
+    );
   }
 
   const isProtected =
@@ -83,14 +110,20 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   const onboardingDone = result.onboardingStep === "DONE";
 
   if (!onboardingDone && !pathname.startsWith("/onboarding")) {
-    return NextResponse.redirect(new URL("/onboarding", request.url));
+    return withSetCookies(
+      NextResponse.redirect(new URL("/onboarding", request.url)),
+      result.setCookies,
+    );
   }
 
   if (onboardingDone && pathname.startsWith("/onboarding")) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    return withSetCookies(
+      NextResponse.redirect(new URL("/dashboard", request.url)),
+      result.setCookies,
+    );
   }
 
-  return NextResponse.next();
+  return withSetCookies(NextResponse.next(), result.setCookies);
 }
 
 export const config = {
