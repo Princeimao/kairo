@@ -14,18 +14,24 @@ import {
   GitBranch,
   X,
   HelpCircle,
+  Search,
+  ExternalLink,
+  Plus,
 } from "lucide-react";
 import PromptBar, { type PromptBarSendDetail } from "@/components/PromptBar";
 import ThoughtLine from "@/components/ThoughtLine";
 import { announceRun } from "@/lib/use-sessions";
-import { useRunStream } from "@/lib/use-run";
+import { useRunStream, type ToolStep } from "@/lib/use-run";
 import {
   ApiError,
   conversations,
   github,
+  research,
   runs,
   type ConversationMessage,
   type GithubRepoItem,
+  type ResearchResult,
+  type ResearchSearchResponse,
 } from "@/lib/api";
 import { useSearchParams, useRouter } from "next/navigation";
 
@@ -48,6 +54,49 @@ const SOURCES = [
 
 const REPO_FULL_NAME_RE = /^[\w.-]+\/[\w.-]+$/;
 const NEGATIVE_REPLY_RE = /^\s*(no|n|nope|deny|declined?|reject(ed)?|cancel)\b/i;
+
+function inputStr(input: unknown, key: string): string | null {
+  if (input === null || typeof input !== "object" || Array.isArray(input)) {
+    return null;
+  }
+  const value = (input as Record<string, unknown>)[key];
+  return typeof value === "string" && value.trim() !== "" ? value : null;
+}
+
+function firstLine(value: string, max: number): string {
+  const line = value.split(/\r?\n/)[0].trim();
+  return line.length > max ? `${line.slice(0, max)}…` : line;
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
+}
+
+/** What this tool call acted on: file path, command, or its target brief. */
+function toolTarget(tool: ToolStep): string | null {
+  const { name, input } = tool;
+  if (name === "bash") {
+    const command = inputStr(input, "command");
+    if (command !== null) return firstLine(command, 100);
+    return inputStr(input, "description");
+  }
+  if (name === "task") {
+    const brief =
+      inputStr(input, "description") ?? inputStr(input, "prompt");
+    if (brief !== null) return firstLine(brief, 120);
+  }
+  return (
+    inputStr(input, "filePath") ??
+    inputStr(input, "path") ??
+    inputStr(input, "url") ??
+    inputStr(input, "pattern") ??
+    inputStr(input, "name")
+  );
+}
 
 export function AgentConsole({
   conversationId,
@@ -83,9 +132,23 @@ export function AgentConsole({
   const [answering, setAnswering] = useState(false);
   const [askNote, setAskNote] = useState("");
   const [answerError, setAnswerError] = useState<string | null>(null);
+  const [researchOpen, setResearchOpen] = useState(false);
+  const [researchQuery, setResearchQuery] = useState("");
+  const [researchBusy, setResearchBusy] = useState(false);
+  const [researchResults, setResearchResults] =
+    useState<ResearchSearchResponse | null>(null);
+  const [researchError, setResearchError] = useState<string | null>(null);
+  const [insertRequest, setInsertRequest] = useState<{
+    text: string;
+    nonce: number;
+  } | null>(null);
 
   const working = view.status === "QUEUED" || view.status === "RUNNING";
   const toolLines = view.tools;
+  const toolRows = toolLines.map((tool) => ({
+    tool,
+    target: toolTarget(tool),
+  }));
 
   // Load a conversation thread (sidebar link → /agent/:conversationId).
   useEffect(() => {
@@ -294,6 +357,35 @@ export function AgentConsole({
     [view.ask, answering, runIdRef, setView],
   );
 
+  // ── Research (Tavily) — user-side search above the composer ─────────────
+  const runResearch = useCallback(
+    (event?: React.FormEvent) => {
+      event?.preventDefault();
+      const query = researchQuery.trim();
+      if (query.length < 2 || researchBusy) return;
+      setResearchBusy(true);
+      setResearchError(null);
+      setResearchResults(null);
+      research
+        .search({ query })
+        .then(setResearchResults)
+        .catch((error: unknown) => {
+          setResearchError(
+            error instanceof ApiError ? error.message : "Research failed",
+          );
+        })
+        .finally(() => setResearchBusy(false));
+    },
+    [researchQuery, researchBusy],
+  );
+
+  const addResultToPrompt = useCallback((result: ResearchResult) => {
+    setInsertRequest({
+      text: `${result.title || result.url} — ${result.url}`,
+      nonce: Date.now(),
+    });
+  }, []);
+
   const onSend = useCallback(
     (text: string, detail: PromptBarSendDetail) => {
       const mode = text.trim().startsWith("/fix") ? "FIX" : "CREATE";
@@ -410,14 +502,14 @@ export function AgentConsole({
                 className="stream-row rounded-xl border border-neutral-200/60 bg-neutral-50/60 px-4 py-2 text-xs text-neutral-500"
               >
                 <summary className="cursor-pointer select-none font-medium">
-                  reasoning
+                  thinking{r.trim() ? ` · ${firstLine(r, 90)}` : ""}
                 </summary>
                 <p className="mt-2 whitespace-pre-wrap leading-relaxed">{r}</p>
               </details>
             ))}
             {view.streamingReasoning && (
               <div className="stream-row rounded-xl border border-neutral-200/60 bg-neutral-50/60 px-4 py-2 text-xs italic text-neutral-400">
-                <span className="not-italic font-medium">reasoning…</span>
+                <span className="not-italic font-medium">thinking…</span>
                 <p className="mt-1 whitespace-pre-wrap leading-relaxed">
                   {view.streamingReasoning.slice(-1200)}
                 </p>
@@ -426,7 +518,9 @@ export function AgentConsole({
 
             <ThoughtLine
               working={working}
-              steps={toolLines.map((t) => t.name)}
+              steps={toolRows.map(({ tool, target }) =>
+                target ? `${tool.name} ${target}` : tool.name,
+              )}
               label={working ? "Working..." : ""}
               doneLabel={
                 toolLines.length
@@ -439,7 +533,7 @@ export function AgentConsole({
               className="stream-row"
             />
 
-            {toolLines.map((t) => (
+            {toolRows.map(({ tool: t, target }) => (
               <div
                 key={t.id}
                 className="stream-row flex items-start gap-3 text-sm"
@@ -452,22 +546,40 @@ export function AgentConsole({
                   )}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                     <span className="font-mono text-[13px] text-neutral-900">
                       {t.name}
                     </span>
+                    {target && (
+                      <span
+                        className="min-w-0 max-w-full truncate font-mono text-[13px] text-neutral-500"
+                        title={target}
+                      >
+                        {target}
+                      </span>
+                    )}
                     {t.status === "done" && (
-                      <CheckCircle2 className="size-3.5 text-emerald-500" />
+                      <CheckCircle2 className="size-3.5 shrink-0 text-emerald-500" />
                     )}
                     {t.status === "error" && (
-                      <CircleX className="size-3.5 text-red-500" />
+                      <CircleX className="size-3.5 shrink-0 text-red-500" />
                     )}
                   </div>
-                  {t.output && (
-                    <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-all rounded-xl bg-neutral-950 p-3.5 font-mono text-[12px] leading-relaxed text-neutral-300">
-                      {t.output}
-                    </pre>
-                  )}
+                  {t.output &&
+                    (t.output.length <= 600 && t.output.split("\n").length <= 8 ? (
+                      <pre className="mt-1.5 max-h-36 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-neutral-950 p-2.5 font-mono text-[11.5px] leading-relaxed text-neutral-300">
+                        {t.output}
+                      </pre>
+                    ) : (
+                      <details className="mt-1.5">
+                        <summary className="cursor-pointer select-none font-mono text-[11.5px] text-neutral-400 transition-colors hover:text-neutral-600">
+                          output · {firstLine(t.output, 110)}
+                        </summary>
+                        <pre className="mt-1.5 max-h-72 overflow-auto whitespace-pre-wrap break-all rounded-xl bg-neutral-950 p-3.5 font-mono text-[12px] leading-relaxed text-neutral-300">
+                          {t.output}
+                        </pre>
+                      </details>
+                    ))}
                 </div>
               </div>
             ))}
@@ -676,7 +788,7 @@ export function AgentConsole({
                 <button
                   type="button"
                   onClick={onStop}
-                  className="ml-2 rounded-full bg-red-50 px-2.5 py-0.5 font-medium text-red-600 transition-colors hover:bg-red-100"
+                  className="rounded-full bg-red-50 px-2.5 py-0.5 font-medium text-red-600 transition-colors hover:bg-red-100"
                 >
                   stop run
                 </button>
@@ -685,13 +797,28 @@ export function AgentConsole({
                 <button
                   type="button"
                   onClick={onNewConversation}
-                  className="ml-auto rounded-full bg-neutral-100 px-2.5 py-0.5 font-medium text-neutral-600 transition-colors hover:bg-neutral-200"
+                  className="rounded-full bg-neutral-100 px-2.5 py-0.5 font-medium text-neutral-600 transition-colors hover:bg-neutral-200"
                 >
                   new chat
                 </button>
               )}
             </div>
           )}
+          <div className="mb-2 flex items-center">
+            <button
+              type="button"
+              onClick={() => setResearchOpen((open) => !open)}
+              aria-expanded={researchOpen}
+              className={`ml-auto inline-flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                researchOpen
+                  ? "bg-orange-100 text-orange-600"
+                  : "bg-neutral-100 text-neutral-500 hover:bg-neutral-200 hover:text-neutral-700"
+              }`}
+            >
+              <Search className="size-3.5" />
+              research
+            </button>
+          </div>
           <div className="relative">
             {repoPickerOpen && (
               <div className="absolute bottom-full left-0 z-30 mb-2 w-full max-w-xs overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-lg">
@@ -750,6 +877,102 @@ export function AgentConsole({
                 </div>
               </div>
             )}
+            {researchOpen && (
+              <div className="absolute bottom-full left-0 z-30 mb-2 w-full max-w-md overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-lg">
+                <div className="flex items-center justify-between border-b border-neutral-100 px-3 py-2">
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-neutral-500">
+                    <Search className="size-3.5" />
+                    Research the web
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Close research"
+                    onClick={() => setResearchOpen(false)}
+                    className="cursor-pointer text-neutral-400 transition-colors hover:text-neutral-600"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+                <form
+                  onSubmit={runResearch}
+                  className="flex gap-2 border-b border-neutral-100 px-2.5 py-2.5"
+                >
+                  <input
+                    value={researchQuery}
+                    onChange={(event) => setResearchQuery(event.target.value)}
+                    placeholder="search docs, versions, how-tos…"
+                    aria-label="Research query"
+                    className="min-w-0 flex-1 rounded-xl border border-neutral-200 px-3 py-1.5 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-orange-400"
+                  />
+                  <button
+                    type="submit"
+                    disabled={
+                      researchBusy || researchQuery.trim().length < 2
+                    }
+                    className="shrink-0 cursor-pointer rounded-xl bg-orange-500 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-orange-400 disabled:opacity-50"
+                  >
+                    {researchBusy ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      "Search"
+                    )}
+                  </button>
+                </form>
+                <div className="max-h-72 overflow-y-auto p-2.5">
+                  {researchError && (
+                    <p className="px-1 py-2 text-xs text-red-500">
+                      {researchError}
+                    </p>
+                  )}
+                  {researchBusy && !researchResults && (
+                    <div className="flex items-center gap-2 px-1 py-2 text-xs text-neutral-400">
+                      <Loader2 className="size-3.5 animate-spin" />
+                      searching…
+                    </div>
+                  )}
+                  {researchResults &&
+                    researchResults.results.length === 0 && (
+                      <p className="px-1 py-2 text-xs text-neutral-400">
+                        No results.
+                      </p>
+                    )}
+                  {researchResults?.results.map((result) => (
+                    <div
+                      key={result.url}
+                      className="group rounded-xl px-2 py-2 transition-colors hover:bg-orange-50"
+                    >
+                      <a
+                        href={result.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-start gap-1 text-[13px] font-medium text-neutral-800 transition-colors hover:text-orange-600"
+                      >
+                        <span className="min-w-0 truncate">
+                          {result.title || result.url}
+                        </span>
+                        <ExternalLink className="mt-0.5 size-3 shrink-0 text-neutral-400" />
+                      </a>
+                      {result.content && (
+                        <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-neutral-500">
+                          {result.content}
+                        </p>
+                      )}
+                      <div className="mt-1 flex items-center gap-2 text-[11px] text-neutral-400">
+                        <span className="truncate">{hostOf(result.url)}</span>
+                        <button
+                          type="button"
+                          onClick={() => addResultToPrompt(result)}
+                          className="ml-auto inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-full border border-neutral-200 bg-white px-2 py-0.5 font-medium text-neutral-500 opacity-0 transition-opacity group-hover:opacity-100 hover:border-orange-300 hover:text-orange-600 focus:opacity-100"
+                        >
+                          <Plus className="size-3" />
+                          add to prompt
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <PromptBar
               className="border rounded-3xl"
               placeholder={
@@ -765,6 +988,7 @@ export function AgentConsole({
               onSend={onSend}
               onStop={onStop}
               onAttach={onAttach}
+              insertText={insertRequest}
               width={720}
               radius={20}
               background="#ffffff"

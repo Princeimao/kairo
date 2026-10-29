@@ -181,7 +181,11 @@ async function runOnce(
       },
     })
     .catch(() => undefined);
-  const { changed: configChanged } = await ensureWorkspaceConfig(ws, settings);
+  const { changed: configChanged } = await ensureWorkspaceConfig(
+    ws,
+    settings,
+    run.userId,
+  );
   log(
     run.id,
     `workspace config ensured (provider=${settings.providerId} model=${settings.modelId})`,
@@ -189,7 +193,7 @@ async function runOnce(
   if (configChanged) {
     log(
       run.id,
-      "opencode.json changed — restarting the container so the server loads it",
+      "opencode config or skills changed — restarting the container so the server loads them",
     );
     await ws.stop();
     running = await ws.ensureRunning();
@@ -615,8 +619,8 @@ function mapPart(part: Part, throttle: PartThrottle): void {
             name: part.tool,
             callId: part.callID,
             state: "done",
-            input: state.input,
-            output: state.output,
+            input: reduceToolInput(state.input),
+            output: clipToolOutput(state.output),
           }
         : state.status === "error"
           ? {
@@ -624,18 +628,62 @@ function mapPart(part: Part, throttle: PartThrottle): void {
               name: part.tool,
               callId: part.callID,
               state: "error",
-              input: state.input,
-              output: state.error,
+              input: reduceToolInput(state.input),
+              output: clipToolOutput(state.error),
             }
           : {
               type: "tool",
               name: part.tool,
               callId: part.callID,
               state: "running",
-              input: state.input,
+              input: reduceToolInput(state.input),
             };
     throttle.push(`tool:${part.id}`, mapped, state.status !== "running");
   }
+}
+
+const TOOL_LABEL_KEYS = [
+  "filePath",
+  "path",
+  "url",
+  "pattern",
+  "command",
+  "description",
+  "name",
+  "query",
+] as const;
+const TOOL_STRING_MAX = 500;
+const TOOL_OUTPUT_MAX = 6_000;
+const TOOL_OUTPUT_TAIL = 1_500;
+
+/**
+ * Tool inputs can embed whole files (write/edit `content`) — keep only the
+ * small scalar fields the UI needs to label a call (file path, command,
+ * description) so SSE + the DB never carry file bodies, and the console never
+ * renders them.
+ */
+function reduceToolInput(input: unknown): Record<string, unknown> | undefined {
+  if (input === null || typeof input !== "object" || Array.isArray(input)) {
+    return undefined;
+  }
+  const reduced: Record<string, unknown> = {};
+  for (const key of TOOL_LABEL_KEYS) {
+    const value = (input as Record<string, unknown>)[key];
+    if (typeof value !== "string" || value === "") continue;
+    reduced[key] =
+      value.length > TOOL_STRING_MAX
+        ? `${value.slice(0, TOOL_STRING_MAX)}…`
+        : value;
+  }
+  return Object.keys(reduced).length > 0 ? reduced : undefined;
+}
+
+/** Head + tail clip so test logs keep their conclusion without bloating steps. */
+function clipToolOutput(output: string): string {
+  if (output.length <= TOOL_OUTPUT_MAX) return output;
+  const head = output.slice(0, TOOL_OUTPUT_MAX - TOOL_OUTPUT_TAIL - 40);
+  const tail = output.slice(-TOOL_OUTPUT_TAIL);
+  return `${head}\n…[truncated]…\n${tail}`;
 }
 
 async function lastAssistantText(

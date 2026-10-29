@@ -398,6 +398,8 @@ type FieldRefInputType<Model, FieldType> = Model extends never ? never : FieldRe
 
 export const ModelName = {
   User: 'User',
+  UserSkill: 'UserSkill',
+  ScheduledRun: 'ScheduledRun',
   GithubConnection: 'GithubConnection',
   Session: 'Session',
   GithubEvent: 'GithubEvent',
@@ -422,7 +424,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "user" | "githubConnection" | "session" | "githubEvent" | "sandbox" | "chatSession" | "conversation" | "message" | "agentRun" | "agentStep"
+    modelProps: "user" | "userSkill" | "scheduledRun" | "githubConnection" | "session" | "githubEvent" | "sandbox" | "chatSession" | "conversation" | "message" | "agentRun" | "agentStep"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -497,6 +499,154 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.UserCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.UserCountAggregateOutputType> | number
+        }
+      }
+    }
+    UserSkill: {
+      payload: Prisma.$UserSkillPayload<ExtArgs>
+      fields: Prisma.UserSkillFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.UserSkillFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$UserSkillPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.UserSkillFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$UserSkillPayload>
+        }
+        findFirst: {
+          args: Prisma.UserSkillFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$UserSkillPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.UserSkillFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$UserSkillPayload>
+        }
+        findMany: {
+          args: Prisma.UserSkillFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$UserSkillPayload>[]
+        }
+        create: {
+          args: Prisma.UserSkillCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$UserSkillPayload>
+        }
+        createMany: {
+          args: Prisma.UserSkillCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.UserSkillCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$UserSkillPayload>[]
+        }
+        delete: {
+          args: Prisma.UserSkillDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$UserSkillPayload>
+        }
+        update: {
+          args: Prisma.UserSkillUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$UserSkillPayload>
+        }
+        deleteMany: {
+          args: Prisma.UserSkillDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.UserSkillUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.UserSkillUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$UserSkillPayload>[]
+        }
+        upsert: {
+          args: Prisma.UserSkillUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$UserSkillPayload>
+        }
+        aggregate: {
+          args: Prisma.UserSkillAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateUserSkill>
+        }
+        groupBy: {
+          args: Prisma.UserSkillGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.UserSkillGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.UserSkillCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.UserSkillCountAggregateOutputType> | number
+        }
+      }
+    }
+    ScheduledRun: {
+      payload: Prisma.$ScheduledRunPayload<ExtArgs>
+      fields: Prisma.ScheduledRunFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.ScheduledRunFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ScheduledRunPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.ScheduledRunFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ScheduledRunPayload>
+        }
+        findFirst: {
+          args: Prisma.ScheduledRunFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ScheduledRunPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.ScheduledRunFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ScheduledRunPayload>
+        }
+        findMany: {
+          args: Prisma.ScheduledRunFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ScheduledRunPayload>[]
+        }
+        create: {
+          args: Prisma.ScheduledRunCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ScheduledRunPayload>
+        }
+        createMany: {
+          args: Prisma.ScheduledRunCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.ScheduledRunCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ScheduledRunPayload>[]
+        }
+        delete: {
+          args: Prisma.ScheduledRunDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ScheduledRunPayload>
+        }
+        update: {
+          args: Prisma.ScheduledRunUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ScheduledRunPayload>
+        }
+        deleteMany: {
+          args: Prisma.ScheduledRunDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.ScheduledRunUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.ScheduledRunUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ScheduledRunPayload>[]
+        }
+        upsert: {
+          args: Prisma.ScheduledRunUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ScheduledRunPayload>
+        }
+        aggregate: {
+          args: Prisma.ScheduledRunAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateScheduledRun>
+        }
+        groupBy: {
+          args: Prisma.ScheduledRunGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.ScheduledRunGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.ScheduledRunCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.ScheduledRunCountAggregateOutputType> | number
         }
       }
     }
@@ -1220,6 +1370,39 @@ export const UserScalarFieldEnum = {
 export type UserScalarFieldEnum = (typeof UserScalarFieldEnum)[keyof typeof UserScalarFieldEnum]
 
 
+export const UserSkillScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  name: 'name',
+  description: 'description',
+  content: 'content',
+  sourceUrl: 'sourceUrl',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type UserSkillScalarFieldEnum = (typeof UserSkillScalarFieldEnum)[keyof typeof UserSkillScalarFieldEnum]
+
+
+export const ScheduledRunScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  title: 'title',
+  prompt: 'prompt',
+  mode: 'mode',
+  intervalMinutes: 'intervalMinutes',
+  dailyAt: 'dailyAt',
+  active: 'active',
+  nextRunAt: 'nextRunAt',
+  lastRunAt: 'lastRunAt',
+  conversationId: 'conversationId',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type ScheduledRunScalarFieldEnum = (typeof ScheduledRunScalarFieldEnum)[keyof typeof ScheduledRunScalarFieldEnum]
+
+
 export const GithubConnectionScalarFieldEnum = {
   id: 'id',
   userId: 'userId',
@@ -1436,6 +1619,20 @@ export type ListDateTimeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaM
 
 
 /**
+ * Reference to a field of type 'AgentRunMode'
+ */
+export type EnumAgentRunModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AgentRunMode'>
+    
+
+
+/**
+ * Reference to a field of type 'AgentRunMode[]'
+ */
+export type ListEnumAgentRunModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AgentRunMode[]'>
+    
+
+
+/**
  * Reference to a field of type 'Int'
  */
 export type IntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Int'>
@@ -1450,6 +1647,13 @@ export type ListIntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel,
 
 
 /**
+ * Reference to a field of type 'Boolean'
+ */
+export type BooleanFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Boolean'>
+    
+
+
+/**
  * Reference to a field of type 'Json'
  */
 export type JsonFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Json'>
@@ -1460,20 +1664,6 @@ export type JsonFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'J
  * Reference to a field of type 'QueryMode'
  */
 export type EnumQueryModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'QueryMode'>
-    
-
-
-/**
- * Reference to a field of type 'AgentRunMode'
- */
-export type EnumAgentRunModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AgentRunMode'>
-    
-
-
-/**
- * Reference to a field of type 'AgentRunMode[]'
- */
-export type ListEnumAgentRunModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AgentRunMode[]'>
     
 
 
@@ -1656,6 +1846,8 @@ export interface PrismaClientOptionsWithAdapter extends PrismaClientBaseOptions 
 export type PrismaClientOptions = PrismaClientOptionsWithAccelerateUrl | PrismaClientOptionsWithAdapter
 export type GlobalOmitConfig = {
   user?: Prisma.UserOmit
+  userSkill?: Prisma.UserSkillOmit
+  scheduledRun?: Prisma.ScheduledRunOmit
   githubConnection?: Prisma.GithubConnectionOmit
   session?: Prisma.SessionOmit
   githubEvent?: Prisma.GithubEventOmit

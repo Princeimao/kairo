@@ -14,6 +14,7 @@ import {
   LogOut,
   Plus,
   RotateCw,
+  Settings,
 } from "lucide-react";
 import { apiFetch, githubLoginUrl, type PublicUser } from "@/lib/api";
 import type { GithubEventItem } from "@/lib/api";
@@ -42,6 +43,7 @@ const NAV: {
 }[] = [
   { title: "Agent", href: "/agent", icon: MessagesSquare },
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { title: "Settings", href: "/settings", icon: Settings },
   {
     title: "GitHub",
     href: githubLoginUrl,

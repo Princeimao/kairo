@@ -573,14 +573,6 @@ export type GithubEventUncheckedUpdateManyWithoutUserNestedInput = {
   deleteMany?: Prisma.GithubEventScalarWhereInput | Prisma.GithubEventScalarWhereInput[]
 }
 
-export type NullableIntFieldUpdateOperationsInput = {
-  set?: number | null
-  increment?: number
-  decrement?: number
-  multiply?: number
-  divide?: number
-}
-
 export type GithubEventCreateWithoutUserInput = {
   id?: string
   deliveryId: string

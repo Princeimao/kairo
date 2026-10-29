@@ -1,8 +1,10 @@
+import { prisma } from "@kairo/db";
 import { DockerWorkspace } from "@kairo/sandbox";
 import { env, modelSettings, type ModelSettings } from "./env.js";
 
 const CONFIG_PATH = ".kairo/config/opencode.json";
 const SKILLS_DIR = ".kairo/skills";
+const SKILL_DIR_NAME_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
 const AGENTS_MD = `# Kairo user sandbox
 
@@ -14,8 +16,16 @@ const AGENTS_MD = `# Kairo user sandbox
 ## Doing the work
 - Read the code around your change first and match its style.
 - Prefer small, working changes; verify with real commands (the project's own build/test when present) before claiming it works.
+- **Plan first:** for any non-trivial task, write a todo list with todowrite and keep it updated with todoread as you go — work through it to the end; do not stop at half-finished work.
+- **Sub-agents:** independent chunks of work can be delegated to sub-agents with the task tool (e.g. parallel research + implementation); always review what they return.
 - \`git push\` is blocked here. Publishing to GitHub and asking the user anything both go through the \`github-publish\` skill — load it with the skill tool and follow it (curl-based, auth token in $KAIRO_LLM_TOKEN).
 - Do NOT call the built-in question tool — it is not wired up in this harness; user questions go through the ask flow in the github-publish skill.
+
+## Research
+- For anything current (library versions, API behaviour, unfamiliar docs, facts you are unsure of), use the \`research\` skill — Tavily search + page extraction through host endpoints. Prefer it over guessing, and cite the urls you actually read. The built-in webfetch tool is fine for a url you already know.
+
+## Skills
+- Beside the built-ins, the user may add their own skills to /workspace/.kairo/skills — when a task looks related to one, load it with the skill tool and follow it.
 
 ## Finishing
 - End with a short plain-text summary of what changed and how you verified it.
@@ -99,6 +109,46 @@ description: Use when implementing, fixing, debugging, or refactoring code — p
   \`github-publish\` skill and follow it.
 - Never print, log or commit secrets (.env files, tokens); .gitignore them first.
 `,
+  "research/SKILL.md": `---
+name: research
+description: Use when you need current information from the web — searching, reading online documentation, checking library/API behaviour, or verifying facts you are unsure of. Tavily-backed search + page extraction through host endpoints.
+---
+
+# Researching the web
+
+Two host-side endpoints for this sandbox (auth: $KAIRO_LLM_TOKEN,
+host: http://host.docker.internal:4000).
+
+## Search
+
+\`\`\`sh
+curl -sS -m 45 -X POST http://host.docker.internal:4000/internal/research/search \\
+  -H "authorization: Bearer $KAIRO_LLM_TOKEN" \\
+  -H "content-type: application/json" \\
+  -d '{"query":"how to configure X in Y","maxResults":5}'
+\`\`\`
+
+→ \`{"query":"...","results":[{"title":"...","url":"...","content":"...","score":0.9}]}\`
+   (optional \`"topic"\`: general | news | finance).
+
+## Read a page / docs
+
+\`\`\`sh
+curl -sS -m 60 -X POST http://host.docker.internal:4000/internal/research/extract \\
+  -H "authorization: Bearer $KAIRO_LLM_TOKEN" \\
+  -H "content-type: application/json" \\
+  -d '{"urls":["https://example.com/docs/page"]}'
+\`\`\`
+
+→ \`{"results":[{"url":"...","content":"<page text>"}],"failed":[]}\` — max 5 urls per call.
+
+## Rules
+
+- Search first, extract the most promising 1-3 pages, then answer from what you read.
+- Cite the urls you actually used — never invent sources.
+- HTTP 503 = research is not configured on the host: fall back to the webfetch tool.
+- Quote sparingly; extract caps pages at ~40k chars each.
+`,
 };
 
 export function openCodeConfigJson(
@@ -155,7 +205,8 @@ export function openCodeConfigJson(
 }
 
 /**
- * Writes (or refreshes) the harness config, skills + AGENTS.md inside the volume.
+ * Writes (or refreshes) the harness config, built-in + user skills and
+ * AGENTS.md inside the volume; prunes skill directories that were deleted.
  * Returns true when something the running OpenCode server must reload changed
  * (opencode.json or the skill files) — the caller restarts the container
  * because `opencode serve` does not hot-reload them. AGENTS.md is plain
@@ -164,6 +215,7 @@ export function openCodeConfigJson(
 export async function ensureWorkspaceConfig(
   ws: DockerWorkspace,
   settings: ModelSettings = modelSettings(),
+  userId?: string,
 ): Promise<{ changed: boolean }> {
   const desired = openCodeConfigJson(settings);
   const current = await ws.readFile(CONFIG_PATH).catch(() => null);
@@ -172,11 +224,54 @@ export async function ensureWorkspaceConfig(
     await ws.writeFile(CONFIG_PATH, desired);
   }
 
-  for (const [relative, content] of Object.entries(SKILLS)) {
+  const skillFiles = new Map<string, string>(Object.entries(SKILLS));
+  if (userId !== undefined) {
+    try {
+      const userSkills = await prisma.userSkill.findMany({
+        where: { userId },
+        orderBy: { name: "asc" },
+      });
+      for (const skill of userSkills) {
+        if (!SKILL_DIR_NAME_RE.test(skill.name)) continue;
+        if (skillFiles.has(`${skill.name}/SKILL.md`)) continue; // reserved
+        skillFiles.set(`${skill.name}/SKILL.md`, skill.content);
+      }
+    } catch (error) {
+      console.warn(
+        `[worker] user skills unavailable: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  for (const [relative, content] of skillFiles) {
     const path = `${SKILLS_DIR}/${relative}`;
     const existing = await ws.readFile(path).catch(() => null);
     if (existing === null || existing.content !== content) {
       await ws.writeFile(path, content);
+      changed = true;
+    }
+  }
+
+  // Remove skill directories that are no longer desired (built-in removed in a
+  // code update, or the user deleted one of their skills).
+  const listed = await ws
+    .exec(`ls -1 ${SKILLS_DIR} 2>/dev/null || true`, { timeoutMs: 15_000 })
+    .catch(() => null);
+  const wanted = new Set(
+    [...skillFiles.keys()].map((relative) => relative.split("/")[0]),
+  );
+  for (const line of listed?.stdout.split(/\r?\n/) ?? []) {
+    const name = line.trim();
+    if (name === "" || !SKILL_DIR_NAME_RE.test(name) || wanted.has(name)) {
+      continue;
+    }
+    const removed = await ws
+      .exec(`rm -rf -- ${JSON.stringify(`${SKILLS_DIR}/${name}`)}`, {
+        timeoutMs: 15_000,
+      })
+      .catch(() => null);
+    if (removed?.exitCode === 0) {
+      console.log(`[worker] pruned stale skill dir: ${name}`);
       changed = true;
     }
   }

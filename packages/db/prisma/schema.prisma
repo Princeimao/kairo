@@ -43,8 +43,60 @@ model User {
   sandbox          Sandbox?
   githubEvents     GithubEvent[]
   chatSessions     ChatSession[]
+  userSkills       UserSkill[]
+  scheduledRuns    ScheduledRun[]
 
   @@map("users")
+}
+
+/// A user-authored skill, written to /workspace/.kairo/skills/<name>/SKILL.md
+/// for this user's sandbox and loaded by OpenCode's `skills` config key.
+model UserSkill {
+  id          String   @id @default(cuid())
+  userId      String
+  /// Directory name (slug) — must be unique per user and not shadow a built-in.
+  name        String
+  /// Front-matter description, mirrored for listings without re-parsing.
+  description String   @default("")
+  /// Full SKILL.md content including YAML front-matter.
+  content     String
+  /// Set when the skill was imported from a URL.
+  sourceUrl   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@map("user_skills")
+}
+
+/// A prompt that re-fires on a schedule (interval or daily UTC time).
+/// The API process ticks these and calls the same startRun as POST /runs.
+model ScheduledRun {
+  id             String        @id @default(cuid())
+  userId         String
+  title          String        @default("")
+  prompt         String
+  mode           AgentRunMode  @default(CREATE)
+  /// Interval preset in minutes (15, 60, 360, 1440, …) XOR dailyAt.
+  intervalMinutes Int?
+  /// "HH:MM" UTC — XOR intervalMinutes.
+  dailyAt        String?
+  active         Boolean       @default(true)
+  nextRunAt      DateTime
+  lastRunAt      DateTime?
+  /// Thread reused across firings; created on the first successful fire.
+  conversationId String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([active, nextRunAt])
+  @@index([userId])
+  @@map("scheduled_runs")
 }
 
 model GithubConnection {

@@ -281,5 +281,125 @@ export type GithubEventItem = {
   createdAt: string;
 };
 
+export type UserSkillItem = {
+  id: string;
+  name: string;
+  description: string;
+  sourceUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ResearchResult = {
+  title: string;
+  url: string;
+  content: string;
+  score?: number;
+};
+
+export type ResearchSearchResponse = {
+  query: string;
+  results: ResearchResult[];
+  answer?: string;
+};
+
+export type ScheduleItem = {
+  id: string;
+  title: string;
+  prompt: string;
+  mode: "CREATE" | "FIX";
+  intervalMinutes: number | null;
+  dailyAt: string | null;
+  active: boolean;
+  nextRunAt: string;
+  lastRunAt: string | null;
+  conversationId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** The user's custom harness skills (create / import-from-URL / delete). */
+export const skills = {
+  list: () =>
+    apiFetch<{ skills: UserSkillItem[] }>("/skills").then((r) => r.skills),
+
+  create: (input: { name: string; description: string; body: string }) =>
+    apiFetch<{ skill: UserSkillItem }>("/skills", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }).then((r) => r.skill),
+
+  /** Fetch a SKILL.md from an online source and install it. */
+  importUrl: (url: string) =>
+    apiFetch<{ skill: UserSkillItem }>("/skills/import", {
+      method: "POST",
+      body: JSON.stringify({ url }),
+    }).then((r) => r.skill),
+
+  remove: (id: string) =>
+    apiFetch<{ ok: boolean }>(`/skills/${id}`, { method: "DELETE" }),
+};
+
+/** Tavily-backed research for the signed-in user. */
+export const research = {
+  search: (input: {
+    query: string;
+    maxResults?: number;
+    topic?: "general" | "news" | "finance";
+  }) =>
+    apiFetch<ResearchSearchResponse>("/research/search", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+
+  extract: (urls: string[]) =>
+    apiFetch<{
+      results: { url: string; content: string }[];
+      failed: { url: string; error: string }[];
+    }>("/research/extract", {
+      method: "POST",
+      body: JSON.stringify({ urls }),
+    }),
+};
+
+/** Scheduled (recurring) runs. */
+export const schedules = {
+  list: () =>
+    apiFetch<{ schedules: ScheduleItem[] }>("/schedules").then(
+      (r) => r.schedules,
+    ),
+
+  create: (input: {
+    title?: string;
+    prompt: string;
+    mode?: "CREATE" | "FIX";
+    intervalMinutes?: number;
+    dailyAt?: string;
+  }) =>
+    apiFetch<{ schedule: ScheduleItem }>("/schedules", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }).then((r) => r.schedule),
+
+  update: (
+    id: string,
+    input: {
+      title?: string;
+      prompt?: string;
+      mode?: "CREATE" | "FIX";
+      active?: boolean;
+      intervalMinutes?: number;
+      dailyAt?: string;
+    },
+  ) =>
+    apiFetch<{ schedule: ScheduleItem }>(`/schedules/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }).then((r) => r.schedule),
+
+  remove: (id: string) =>
+    apiFetch<{ ok: boolean }>(`/schedules/${id}`, { method: "DELETE" }),
+};
+
 /** Full-page navigation through the proxy, so the session cookie lands on this origin. */
 export const githubLoginUrl = "/api/auth/github";

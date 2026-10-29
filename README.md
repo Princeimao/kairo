@@ -40,10 +40,25 @@ web (:3000) ──► api (:4000) ──► BullMQ (redis) ──► worker
   `POST /runs/:id/answers` writes the reply. The worker polls the pending
   marker and emits an `ask` SSE event, so the console shows the question with
   Approve / Decline / option / free-text reply while the agent waits.
-- **Skills:** the worker writes `/workspace/.kairo/skills/*/SKILL.md`
-  (`github-publish`, `software-engineer`) and enables them via OpenCode's
-  `skills` config key; skill/config changes restart the container once so the
-  server picks them up.
+- **Skills:** the harness writes `/workspace/.kairo/skills/*/SKILL.md`
+  (`github-publish`, `software-engineer`, `research`) and enables them via
+  OpenCode's `skills` config key; skill/config changes restart the container
+  once so the server picks them up.
+- **Custom skills:** create one or import a `SKILL.md` from a URL at
+  *Settings → Custom skills* (`POST /skills`, `user_skills` table). The worker
+  writes them beside the built-ins on the next run and prunes deleted ones.
+- **Research (Tavily):** search + page extraction via `POST /research`
+  (console popover above the composer, "add to prompt") and
+  `POST /internal/research/*` (agent, via the `research` skill). Set
+  `TAVILY_API_KEY` in `apps/api/.env`.
+- **Scheduled runs:** `scheduled_runs` rows ticked in-process by the API
+  (`lib/scheduler.ts`, every 20s) — each due schedule fires the normal
+  `startRun` once per period (skipped when another run is active). Managed at
+  *Settings → Scheduled runs* (interval or daily HH:MM UTC).
+- **Run stream:** tool events carry only small label fields (file path,
+  command, description — never file bodies) with head+tail clipped output; the
+  console renders `name · target` rows with collapsible output, and reasoning
+  shows as collapsible "thinking" blocks.
 
 ## Quick start
 

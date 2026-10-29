@@ -427,10 +427,6 @@ export type ConversationUncheckedUpdateManyWithoutSessionNestedInput = {
   deleteMany?: Prisma.ConversationScalarWhereInput | Prisma.ConversationScalarWhereInput[]
 }
 
-export type EnumAgentRunModeFieldUpdateOperationsInput = {
-  set?: $Enums.AgentRunMode
-}
-
 export type ConversationCreateNestedOneWithoutMessagesInput = {
   create?: Prisma.XOR<Prisma.ConversationCreateWithoutMessagesInput, Prisma.ConversationUncheckedCreateWithoutMessagesInput>
   connectOrCreate?: Prisma.ConversationCreateOrConnectWithoutMessagesInput

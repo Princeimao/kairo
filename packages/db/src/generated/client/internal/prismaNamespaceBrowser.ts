@@ -52,6 +52,8 @@ export const AnyNull = runtime.AnyNull
 
 export const ModelName = {
   User: 'User',
+  UserSkill: 'UserSkill',
+  ScheduledRun: 'ScheduledRun',
   GithubConnection: 'GithubConnection',
   Session: 'Session',
   GithubEvent: 'GithubEvent',
@@ -92,6 +94,39 @@ export const UserScalarFieldEnum = {
 } as const
 
 export type UserScalarFieldEnum = (typeof UserScalarFieldEnum)[keyof typeof UserScalarFieldEnum]
+
+
+export const UserSkillScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  name: 'name',
+  description: 'description',
+  content: 'content',
+  sourceUrl: 'sourceUrl',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type UserSkillScalarFieldEnum = (typeof UserSkillScalarFieldEnum)[keyof typeof UserSkillScalarFieldEnum]
+
+
+export const ScheduledRunScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  title: 'title',
+  prompt: 'prompt',
+  mode: 'mode',
+  intervalMinutes: 'intervalMinutes',
+  dailyAt: 'dailyAt',
+  active: 'active',
+  nextRunAt: 'nextRunAt',
+  lastRunAt: 'lastRunAt',
+  conversationId: 'conversationId',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type ScheduledRunScalarFieldEnum = (typeof ScheduledRunScalarFieldEnum)[keyof typeof ScheduledRunScalarFieldEnum]
 
 
 export const GithubConnectionScalarFieldEnum = {

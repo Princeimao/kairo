@@ -56,6 +56,12 @@ export interface PromptBarSendDetail {
   effort?: string;
 }
 
+/** External text pushed INTO the draft (e.g. a research result), by nonce. */
+export interface PromptBarInsert {
+  text: string;
+  nonce: number;
+}
+
 export interface PromptBarProps {
   placeholder?: string;
   sources?: PromptBarSource[];
@@ -70,6 +76,8 @@ export interface PromptBarProps {
   onStop?: () => void;
   onAttach?: () => string | string[] | void | Promise<string | string[] | void>;
   onDictate?: () => string | void | Promise<string | void>;
+  /** Append text to the draft from outside (research → "add to prompt"). */
+  insertText?: PromptBarInsert | null;
   background?: string;
   color?: string;
   menuBackground?: string;
@@ -228,6 +236,7 @@ const PromptBar: React.FC<PromptBarProps> = ({
   onStop,
   onAttach,
   onDictate,
+  insertText,
   background = '#27272a',
   color = '#f5f5f5',
   menuBackground = '#323236',
@@ -341,6 +350,17 @@ const PromptBar: React.FC<PromptBarProps> = ({
     },
     []
   );
+
+  const lastInsert = useRef(0);
+  useEffect(() => {
+    if (!insertText || insertText.nonce === lastInsert.current) return;
+    lastInsert.current = insertText.nonce;
+    if (!insertText.text) return;
+    setDraft(d =>
+      d.trim() ? `${d.trimEnd()}\n${insertText.text}` : insertText.text
+    );
+    focusInput();
+  }, [insertText]);
 
   useEffect(() => {
     const canvas = sparkRef.current;

@@ -23,6 +23,18 @@ export * from './enums';
  */
 export type User = Prisma.UserModel
 /**
+ * Model UserSkill
+ * A user-authored skill, written to /workspace/.kairo/skills/<name>/SKILL.md
+ * for this user's sandbox and loaded by OpenCode's `skills` config key.
+ */
+export type UserSkill = Prisma.UserSkillModel
+/**
+ * Model ScheduledRun
+ * A prompt that re-fires on a schedule (interval or daily UTC time).
+ * The API process ticks these and calls the same startRun as POST /runs.
+ */
+export type ScheduledRun = Prisma.ScheduledRunModel
+/**
  * Model GithubConnection
  * 
  */

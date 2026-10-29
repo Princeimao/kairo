@@ -631,10 +631,6 @@ export type IntFieldUpdateOperationsInput = {
   divide?: number
 }
 
-export type NullableDateTimeFieldUpdateOperationsInput = {
-  set?: Date | string | null
-}
-
 export type AgentRunCreateNestedOneWithoutStepsInput = {
   create?: Prisma.XOR<Prisma.AgentRunCreateWithoutStepsInput, Prisma.AgentRunUncheckedCreateWithoutStepsInput>
   connectOrCreate?: Prisma.AgentRunCreateOrConnectWithoutStepsInput
