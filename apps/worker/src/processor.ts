@@ -15,7 +15,7 @@ import {
   type RunEvent,
   type RunJobData,
 } from "@kairo/run-queue";
-import { env } from "./env.js";
+import { env, modelSettings } from "./env.js";
 import { ensureWorkspaceConfig } from "./config.js";
 import { containerBaseUrl, createClient, waitForHealth } from "./opencode.js";
 import { buildPrompt } from "./prompt.js";
@@ -154,7 +154,8 @@ async function runOnce(
   throttle: PartThrottle,
   redis: IORedis,
 ): Promise<void> {
-  const running: RunningSandbox = await ws.ensureRunning();
+  const settings = modelSettings();
+  let running: RunningSandbox = await ws.ensureRunning();
   log(
     run.id,
     `workspace running: container=${running.containerName} image=${running.image} hostPort=${running.hostPort}`,
@@ -177,10 +178,24 @@ async function runOnce(
       },
     })
     .catch(() => undefined);
+  const { changed: configChanged } = await ensureWorkspaceConfig(ws, settings);
+  log(
+    run.id,
+    `workspace config ensured (provider=${settings.providerId} model=${settings.modelId})`,
+  );
+  if (configChanged) {
+    log(
+      run.id,
+      "opencode.json changed — restarting the container so the server loads it",
+    );
+    await ws.stop();
+    running = await ws.ensureRunning();
+    log(
+      run.id,
+      `container restarted: container=${running.containerName} hostPort=${running.hostPort}`,
+    );
+  }
   emitter.emit({ type: "workspace", state: "ready" });
-
-  await ensureWorkspaceConfig(ws);
-  log(run.id, "workspace config ensured");
 
   const containerName = running.containerName ?? containerNameFor(run.userId);
   const baseUrl = containerBaseUrl(running.hostPort);
@@ -349,7 +364,7 @@ async function runOnce(
   const promptText = buildPrompt(run);
   log(
     run.id,
-    `prompting session ${sessionId} (model=${env.OPENCODE_PROVIDER_ID}/${env.OPENCODE_MODEL}, chars=${promptText.length})`,
+    `prompting session ${sessionId} (model=${settings.providerId}/${settings.modelId}, chars=${promptText.length})`,
   );
   const promptStarted = Date.now();
   const promptResult = await client.session.promptAsync({
@@ -357,8 +372,8 @@ async function runOnce(
     body: {
       parts: [{ type: "text", text: promptText }],
       model: {
-        providerID: env.OPENCODE_PROVIDER_ID,
-        modelID: env.OPENCODE_MODEL,
+        providerID: settings.providerId,
+        modelID: settings.modelId,
       },
     },
   });

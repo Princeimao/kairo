@@ -4,10 +4,10 @@ import { Readable } from "node:stream";
 import express, { type Request, type Response } from "express";
 import { prisma } from "@kairo/db";
 import { DockerWorkspace } from "@kairo/sandbox";
-import { env } from "../config/env.js";
+import { env, freshEnvValue } from "../config/env.js";
 
 /**
- * Host-side LLM proxy (R4). Containers never see NEBIUS_API_KEY: OpenCode
+ * Host-side LLM proxy (R4). Containers never see the upstream API key: OpenCode
  * points its openai-compatible provider at /internal/llm/v1 with a
  * per-container token (KAIRO_LLM_TOKEN). Every request must prove:
  *
@@ -28,12 +28,26 @@ const ACTIVE_RUN_GRACE_MS = 15 * 60 * 1000;
 const MAX_OUTPUT_TOKENS = 8_192;
 const ROOT = "/internal/llm";
 
+/**
+ * Allowed model ids, re-read from apps/api/.env on every request so edits
+ * apply without an API restart. Always includes the current OPENCODE_MODEL
+ * (provider prefix stripped) in addition to LLM_MODEL_ALLOWLIST.
+ */
 function modelAllowlist(): Set<string> {
-  return new Set(
-    env.LLM_MODEL_ALLOWLIST.split(",")
-      .map((entry) => entry.trim())
-      .filter((entry) => entry.length > 0),
-  );
+  const allow = new Set<string>();
+  const list = freshEnvValue("LLM_MODEL_ALLOWLIST") ?? env.LLM_MODEL_ALLOWLIST;
+  for (const entry of list.split(",")) {
+    const trimmed = entry.trim();
+    if (trimmed.length > 0) allow.add(trimmed);
+  }
+  const model = (freshEnvValue("OPENCODE_MODEL") ?? env.OPENCODE_MODEL).trim();
+  if (model.length > 0) {
+    const provider = freshEnvValue("OPENCODE_PROVIDER_ID");
+    const prefix = `${(provider ?? "").trim()}/`;
+    allow.add(provider !== null && model.startsWith(prefix) ? model.slice(prefix.length) : model);
+    allow.add(model);
+  }
+  return allow;
 }
 
 interface Authed {

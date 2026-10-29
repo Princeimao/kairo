@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
 // Load apps/api/.env (same semantics as `node --env-file`).
@@ -106,3 +109,47 @@ export const encryptionKey = Buffer.from(env.TOKEN_ENCRYPTION_KEY, "base64");
 
 export const sessionTtlMs = () => env.SESSION_TTL_HOURS * 60 * 60 * 1000;
 export const oauthCookieTtlMs = () => 10 * 60 * 1000;
+
+const API_ENV_FILE = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  ".env",
+);
+
+/**
+ * Re-reads apps/api/.env on demand so edits (model allowlist, OPENCODE_MODEL)
+ * take effect without restarting the API process. Falls back to the process
+ * environment for keys not set in the file.
+ */
+export function freshEnvValue(key: string): string | null {
+  if (existsSync(API_ENV_FILE)) {
+    let text: string;
+    try {
+      text = readFileSync(API_ENV_FILE, "utf8");
+    } catch {
+      text = "";
+    }
+    for (const line of text.split(/\r?\n/)) {
+      const match = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(
+        line,
+      );
+      if (match === null || match[1] !== key) continue;
+      let value = match[2].trim();
+      if (value.startsWith("#")) continue;
+      if (
+        value.length >= 2 &&
+        ((value.startsWith('"') && value.endsWith('"')) ||
+          (value.startsWith("'") && value.endsWith("'")))
+      ) {
+        value = value.slice(1, -1);
+      } else {
+        const comment = value.indexOf(" #");
+        if (comment !== -1) value = value.slice(0, comment).trim();
+      }
+      if (value !== "") return value;
+    }
+  }
+  const fromProcess = process.env[key];
+  return fromProcess !== undefined && fromProcess !== "" ? fromProcess : null;
+}
